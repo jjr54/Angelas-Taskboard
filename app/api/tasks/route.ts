@@ -84,6 +84,9 @@ export async function GET(request: Request) {
       instruments: record.fields.instruments || [],
       status: record.fields.status?.toLowerCase().replace(/\s+/g, "") || "todo",
       completed: record.fields.completed || false,
+      youtubeUrl: record.fields.youtube_url || "",
+      timestamp: record.fields.timestamp || "",
+      screenshotUrl: record.fields.screenshot_url || "",
     }))
 
     return NextResponse.json({ tasks })
@@ -122,24 +125,28 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json()
+    console.log("Creating task with data:", body)
 
     const airtableData = {
       fields: {
         title: body.title,
         description: body.description,
-        assignee_name: body.assignee.name,
-        assignee_avatar: body.assignee.avatar,
-        assignee_initials: body.assignee.initials,
+        assignee_name: body.assignee?.name,
+        assignee_avatar: body.assignee?.avatar,
+        assignee_initials: body.assignee?.initials,
         due_date: body.dueDate,
-        priority: body.priority.charAt(0).toUpperCase() + body.priority.slice(1),
-        type: body.type.charAt(0).toUpperCase() + body.type.slice(1),
+        priority: body.priority?.charAt(0).toUpperCase() + body.priority?.slice(1),
+        type: body.type?.charAt(0).toUpperCase() + body.type?.slice(1),
         duration: body.duration,
         instruments: body.instruments,
         status: body.status
-          .split("")
+          ?.split("")
           .map((char: string, i: number) => (i === 0 || body.status[i - 1] === " " ? char.toUpperCase() : char))
           .join(""),
         completed: body.completed,
+        youtube_url: body.youtubeUrl,
+        timestamp: body.timestamp,
+        screenshot_url: body.screenshotUrl,
       },
     }
 
@@ -165,7 +172,9 @@ export async function POST(request: Request) {
     }
 
     const data = await response.json()
+    console.log("Successfully created task:", data)
 
+    // Return the created task with the Airtable ID
     return NextResponse.json({
       id: data.id,
       ...body,
@@ -219,8 +228,8 @@ export async function PATCH(request: Request) {
         assignee_avatar: fields.assignee?.avatar,
         assignee_initials: fields.assignee?.initials,
         due_date: fields.dueDate,
-        priority: fields.priority?.charAt(0).toUpperCase() + fields.priority.slice(1),
-        type: fields.type?.charAt(0).toUpperCase() + fields.type.slice(1),
+        priority: fields.priority?.charAt(0).toUpperCase() + fields.priority?.slice(1),
+        type: fields.type?.charAt(0).toUpperCase() + fields.type?.slice(1),
         duration: fields.duration,
         instruments: fields.instruments,
         status: fields.status
@@ -228,6 +237,9 @@ export async function PATCH(request: Request) {
           .map((char: string, i: number) => (i === 0 || fields.status[i - 1] === " " ? char.toUpperCase() : char))
           .join(""),
         completed: fields.completed,
+        youtube_url: fields.youtubeUrl,
+        timestamp: fields.timestamp,
+        screenshot_url: fields.screenshotUrl,
       },
     }
 
@@ -260,6 +272,68 @@ export async function PATCH(request: Request) {
     return NextResponse.json(
       {
         error: "Failed to update task",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+// DELETE task
+export async function DELETE(request: Request) {
+  try {
+    const AIRTABLE_ACCESS_TOKEN = process.env.AIRTABLE_ACCESS_TOKEN
+    const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME
+
+    // Get table name and task ID from query params
+    const url = new URL(request.url)
+    const tableName = url.searchParams.get("table") || AIRTABLE_TABLE_NAME || "Tasks"
+    const taskId = url.searchParams.get("id")
+
+    if (!taskId) {
+      return NextResponse.json({ error: "Task ID is required" }, { status: 400 })
+    }
+
+    // Check if environment variables are set
+    if (!AIRTABLE_ACCESS_TOKEN || !AIRTABLE_BASE_ID) {
+      console.error("Missing Airtable environment variables")
+      return NextResponse.json({ error: "Server configuration error: Missing Airtable credentials" }, { status: 500 })
+    }
+
+    const headers = {
+      Authorization: `Bearer ${AIRTABLE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    }
+
+    const apiUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}/${taskId}`
+    console.log(`Deleting from Airtable: ${apiUrl}`)
+
+    const response = await fetch(apiUrl, {
+      method: "DELETE",
+      headers,
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Airtable API error: ${response.status} ${response.statusText}`, errorText)
+      return NextResponse.json(
+        {
+          error: `Airtable API error: ${response.status} ${response.statusText}`,
+          details: errorText,
+        },
+        { status: response.status },
+      )
+    }
+
+    const data = await response.json()
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error("Error deleting task:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to delete task",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },

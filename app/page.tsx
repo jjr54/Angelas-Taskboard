@@ -4,20 +4,17 @@ import { useState, useEffect, useCallback } from "react"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Plus, Music, Clock, Calendar, RefreshCw, Settings } from "lucide-react"
+import { Plus, RefreshCw, Settings } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AirtableConfig } from "./components/airtable-config"
 import { ThemeToggle } from "./components/theme-toggle"
 import { DebugButton } from "./components/debug-button"
+import { TaskForm } from "./components/task-form"
+import { TaskCard } from "./components/task-card"
 
 interface Task {
   id: string
@@ -35,6 +32,9 @@ interface Task {
   instruments?: string[]
   status?: string
   completed: boolean
+  youtubeUrl?: string
+  timestamp?: string
+  screenshotUrl?: string
 }
 
 interface Column {
@@ -50,34 +50,10 @@ const initialData: Column[] = [
   { id: "complete", title: "Complete", tasks: [] },
 ]
 
-const typeColors = {
-  composition: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  arrangement: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  recording: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  mixing: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-}
-
-const priorityColors = {
-  low: "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200",
-  medium: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
-  high: "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200",
-}
-
 export default function MusicCompositionBoard() {
   const [columns, setColumns] = useState<Column[]>(initialData)
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
   const [isConfigOpen, setIsConfigOpen] = useState(false)
-  const [newTask, setNewTask] = useState({
-    title: "",
-    description: "",
-    assignee: "",
-    dueDate: "",
-    priority: "medium" as "low" | "medium" | "high",
-    type: "composition" as "composition" | "arrangement" | "recording" | "mixing" | "review",
-    duration: "",
-    instruments: [] as string[],
-  })
   const [selectedColumn, setSelectedColumn] = useState("")
   const [airtableConfig, setAirtableConfig] = useState({
     tableName: "Tasks",
@@ -237,42 +213,44 @@ export default function MusicCompositionBoard() {
     }
   }
 
-  const toggleTaskComplete = async (taskId: string, columnId: string) => {
+  const deleteTask = async (taskId: string, columnId: string) => {
+    // Find the task to delete
     const column = columns.find((col) => col.id === columnId)
-    const task = column?.tasks.find((t) => t.id === taskId)
+    if (!column) return
 
-    if (!task) return
-
-    const updatedTask = { ...task, completed: !task.completed }
-
+    // Update UI optimistically
     const newColumns = columns.map((col) => {
       if (col.id === columnId) {
         return {
           ...col,
-          tasks: col.tasks.map((task) => (task.id === taskId ? updatedTask : task)),
+          tasks: col.tasks.filter((task) => task.id !== taskId),
         }
       }
       return col
     })
+
     setColumns(newColumns)
 
-    // Update task in Airtable
+    // Delete from Airtable
     try {
-      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedTask),
+      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}&id=${taskId}`, {
+        method: "DELETE",
       })
 
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || `API error: ${response.status} ${response.statusText}`)
       }
+
+      toast({
+        title: "Task Deleted",
+        description: "The task has been removed from the board",
+      })
     } catch (error) {
-      console.error("Error updating task:", error)
+      console.error("Error deleting task:", error)
       toast({
         title: "Error",
-        description: "Failed to update task in Airtable. Changes may not be saved.",
+        description: "Failed to delete task from Airtable",
         variant: "destructive",
       })
       // Revert changes on error
@@ -280,37 +258,85 @@ export default function MusicCompositionBoard() {
     }
   }
 
-  const addTask = async () => {
-    if (!newTask.title || !selectedColumn) return
+  const duplicateTask = async (taskId: string, columnId: string) => {
+    // Find the task to duplicate
+    const column = columns.find((col) => col.id === columnId)
+    if (!column) return
 
-    const task: Task = {
-      id: Date.now().toString(), // Temporary ID
-      title: newTask.title,
-      description: newTask.description,
-      assignee: {
-        name: newTask.assignee || "Unassigned",
-        avatar: "/placeholder.svg?height=32&width=32",
-        initials: newTask.assignee
-          ? newTask.assignee
-              .split(" ")
-              .map((n) => n[0])
-              .join("")
-              .toUpperCase()
-          : "UN",
-      },
-      dueDate: newTask.dueDate,
-      priority: newTask.priority,
-      type: newTask.type,
-      duration: newTask.duration,
-      instruments: newTask.instruments,
-      status: selectedColumn,
-      completed: false,
+    const taskToDuplicate = column.tasks.find((task) => task.id === taskId)
+    if (!taskToDuplicate) return
+
+    // Create a duplicate with a new ID
+    const duplicatedTask: Task = {
+      ...taskToDuplicate,
+      id: `duplicate-${Date.now()}`,
+      title: `${taskToDuplicate.title} (Copy)`,
     }
+
+    // Update UI optimistically
+    const newColumns = columns.map((col) => {
+      if (col.id === columnId) {
+        return {
+          ...col,
+          tasks: [...col.tasks, duplicatedTask],
+        }
+      }
+      return col
+    })
+
+    setColumns(newColumns)
+
+    // Create the duplicated task in Airtable
+    try {
+      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(duplicatedTask),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || `API error: ${response.status} ${response.statusText}`)
+      }
+
+      const createdTask = await response.json()
+
+      // Update with real ID from Airtable
+      const updatedColumns = columns.map((col) => {
+        if (col.id === columnId) {
+          return {
+            ...col,
+            tasks: col.tasks.map((t) => (t.id === duplicatedTask.id ? { ...t, id: createdTask.id } : t)),
+          }
+        }
+        return col
+      })
+
+      setColumns(updatedColumns)
+
+      toast({
+        title: "Success",
+        description: "Task duplicated successfully",
+      })
+    } catch (error) {
+      console.error("Error duplicating task:", error)
+      toast({
+        title: "Error",
+        description: "Failed to duplicate task in Airtable",
+        variant: "destructive",
+      })
+      // Revert changes on error
+      setShouldFetchTasks(true)
+    }
+  }
+
+  const addTask = async (task: any) => {
+    if (!task.title || !selectedColumn) return
 
     // Optimistically update UI
     const newColumns = columns.map((col) => {
       if (col.id === selectedColumn) {
-        return { ...col, tasks: [...col.tasks, task] }
+        return { ...col, tasks: [...col.tasks, { ...task, id: Date.now().toString() }] }
       }
       return col
     })
@@ -357,26 +383,7 @@ export default function MusicCompositionBoard() {
       setShouldFetchTasks(true)
     }
 
-    setNewTask({
-      title: "",
-      description: "",
-      assignee: "",
-      dueDate: "",
-      priority: "medium",
-      type: "composition",
-      duration: "",
-      instruments: [],
-    })
-    setSelectedColumn("")
     setIsAddTaskOpen(false)
-  }
-
-  const handleInstrumentChange = (value: string) => {
-    const instruments = value
-      .split(",")
-      .map((i) => i.trim())
-      .filter((i) => i)
-    setNewTask({ ...newTask, instruments })
   }
 
   const handleRetry = useCallback(() => {
@@ -403,17 +410,8 @@ export default function MusicCompositionBoard() {
           </div>
         </div>
 
-        {/* Add the theme test component */}
-
-        {/* Rest of the component remains the same... */}
-
         <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>Airtable Configuration</DialogTitle>
-            </DialogHeader>
-            <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
-          </DialogContent>
+          <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
         </Dialog>
 
         {!isConfigured && !isConfigOpen && (
@@ -479,215 +477,37 @@ export default function MusicCompositionBoard() {
                         {column.tasks.map((task, index) => (
                           <Draggable key={task.id} draggableId={task.id} index={index}>
                             {(provided, snapshot) => (
-                              <Card
-                                ref={provided.innerRef}
-                                {...provided.draggableProps}
-                                {...provided.dragHandleProps}
-                                className={cn(
-                                  "cursor-grab active:cursor-grabbing transition-shadow",
-                                  snapshot.isDragging && "shadow-lg rotate-2",
-                                  task.completed && "opacity-75",
-                                )}
-                              >
-                                <CardHeader className="pb-2">
-                                  <div className="flex items-start justify-between">
-                                    <CardTitle className="text-sm font-medium leading-tight">{task.title}</CardTitle>
-                                    <input
-                                      type="checkbox"
-                                      checked={task.completed}
-                                      onChange={() => toggleTaskComplete(task.id, column.id)}
-                                      className="ml-2 rounded dark:bg-gray-700"
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                  </div>
-                                </CardHeader>
-                                <CardContent className="pt-0 space-y-3">
-                                  <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
-                                    {task.description}
-                                  </p>
-
-                                  <div className="flex flex-wrap gap-1">
-                                    <Badge
-                                      className={
-                                        typeColors[task.type] ||
-                                        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                                      }
-                                      variant="secondary"
-                                    >
-                                      <Music className="w-3 h-3 mr-1" />
-                                      {task.type}
-                                    </Badge>
-                                    <Badge
-                                      className={
-                                        priorityColors[task.priority] ||
-                                        "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"
-                                      }
-                                      variant="secondary"
-                                    >
-                                      {task.priority}
-                                    </Badge>
-                                  </div>
-
-                                  {task.duration && (
-                                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                      <Clock className="w-3 h-3 mr-1" />
-                                      {task.duration}
-                                    </div>
-                                  )}
-
-                                  {task.instruments && task.instruments.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {task.instruments.map((instrument, i) => (
-                                        <Badge key={`${instrument}-${i}`} variant="outline" className="text-xs">
-                                          {instrument}
-                                        </Badge>
-                                      ))}
-                                    </div>
-                                  )}
-
-                                  <div className="flex items-center justify-between pt-2">
-                                    <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
-                                      <Calendar className="w-3 h-3 mr-1" />
-                                      {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}
-                                    </div>
-                                    <Avatar className="w-6 h-6">
-                                      <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-                                      <AvatarFallback className="text-xs">{task.assignee.initials}</AvatarFallback>
-                                    </Avatar>
-                                  </div>
-                                </CardContent>
-                              </Card>
+                              <TaskCard
+                                task={task}
+                                provided={provided}
+                                snapshot={snapshot}
+                                onDelete={(taskId) => deleteTask(taskId, column.id)}
+                                onDuplicate={(taskId) => duplicateTask(taskId, column.id)}
+                              />
                             )}
                           </Draggable>
                         ))}
                         {provided.placeholder}
 
-                        <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+                        <Dialog
+                          open={isAddTaskOpen && selectedColumn === column.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setSelectedColumn(column.id)
+                            }
+                            setIsAddTaskOpen(open)
+                          }}
+                        >
                           <DialogTrigger asChild>
                             <Button
                               variant="ghost"
                               className="w-full border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 h-20"
-                              onClick={() => setSelectedColumn(column.id)}
                             >
                               <Plus className="w-4 h-4 mr-2" />
                               Add Task
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="sm:max-w-[425px]">
-                            <DialogHeader>
-                              <DialogTitle>Add New Task to {column.title}</DialogTitle>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                              <div className="grid gap-2">
-                                <Label htmlFor="title">Task Title</Label>
-                                <Input
-                                  id="title"
-                                  value={newTask.title}
-                                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                                  placeholder="e.g., Main Theme Composition"
-                                />
-                              </div>
-
-                              <div className="grid gap-2">
-                                <Label htmlFor="description">Description</Label>
-                                <Textarea
-                                  id="description"
-                                  value={newTask.description}
-                                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                                  placeholder="Describe the musical task..."
-                                />
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="type">Type</Label>
-                                  <Select
-                                    value={newTask.type}
-                                    onValueChange={(value: any) => setNewTask({ ...newTask, type: value })}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="composition">Composition</SelectItem>
-                                      <SelectItem value="arrangement">Arrangement</SelectItem>
-                                      <SelectItem value="recording">Recording</SelectItem>
-                                      <SelectItem value="mixing">Mixing</SelectItem>
-                                      <SelectItem value="review">Review</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-
-                                <div className="grid gap-2">
-                                  <Label htmlFor="priority">Priority</Label>
-                                  <Select
-                                    value={newTask.priority}
-                                    onValueChange={(value: any) => setNewTask({ ...newTask, priority: value })}
-                                  >
-                                    <SelectTrigger>
-                                      <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="low">Low</SelectItem>
-                                      <SelectItem value="medium">Medium</SelectItem>
-                                      <SelectItem value="high">High</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              </div>
-
-                              <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                  <Label htmlFor="assignee">Assignee</Label>
-                                  <Input
-                                    id="assignee"
-                                    value={newTask.assignee}
-                                    onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
-                                    placeholder="Team member name"
-                                  />
-                                </div>
-
-                                <div className="grid gap-2">
-                                  <Label htmlFor="duration">Duration</Label>
-                                  <Input
-                                    id="duration"
-                                    value={newTask.duration}
-                                    onChange={(e) => setNewTask({ ...newTask, duration: e.target.value })}
-                                    placeholder="e.g., 3:30"
-                                  />
-                                </div>
-                              </div>
-
-                              <div className="grid gap-2">
-                                <Label htmlFor="dueDate">Due Date</Label>
-                                <Input
-                                  id="dueDate"
-                                  type="date"
-                                  value={newTask.dueDate}
-                                  onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                                />
-                              </div>
-
-                              <div className="grid gap-2">
-                                <Label htmlFor="instruments">Instruments (comma-separated)</Label>
-                                <Input
-                                  id="instruments"
-                                  value={newTask.instruments.join(", ")}
-                                  onChange={(e) => handleInstrumentChange(e.target.value)}
-                                  placeholder="e.g., Piano, Strings, Orchestra"
-                                />
-                              </div>
-
-                              <div className="flex justify-end gap-2">
-                                <Button variant="outline" onClick={() => setIsAddTaskOpen(false)}>
-                                  Cancel
-                                </Button>
-                                <Button onClick={addTask} disabled={!newTask.title}>
-                                  Add Task
-                                </Button>
-                              </div>
-                            </div>
-                          </DialogContent>
+                          <TaskForm columnId={column.id} onAddTask={addTask} onCancel={() => setIsAddTaskOpen(false)} />
                         </Dialog>
                       </div>
                     )}
