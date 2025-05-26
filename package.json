@@ -41,7 +41,7 @@
     "@sparticuz/chromium": "latest",
     "autoprefixer": "^10.4.20",
     "class-variance-authority": "^0.7.1",
-    "cloudinary": "^1.30.0",
+    "cloudinary": "latest",
     "clsx": "^2.1.1",
     "cmdk": "1.0.4",
     "date-fns": "4.1.0",
