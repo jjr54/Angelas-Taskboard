@@ -44,22 +44,29 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate }: Ta
       )}
     >
       {task.screenshotUrl && (
-        <div className="relative w-full h-32 overflow-hidden rounded-t-lg">
+        <div className="relative w-full h-40 overflow-hidden rounded-t-lg">
           <img
             src={task.screenshotUrl || "/placeholder.svg"}
             alt="Video screenshot"
             className="w-full h-full object-cover"
           />
+          {task.youtubeUrl && <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />}
           {task.youtubeUrl && (
             <a
               href={task.youtubeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="absolute bottom-2 right-2 bg-red-600 text-white p-1 rounded-md hover:bg-red-700 transition-colors"
+              className="absolute bottom-2 right-2 bg-red-600 text-white p-2 rounded-md hover:bg-red-700 transition-colors shadow-lg"
               title="Open YouTube video"
             >
-              <Youtube className="h-4 w-4" />
+              <Youtube className="h-5 w-5" />
             </a>
+          )}
+          {task.timestamp && (
+            <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+              {Math.floor(Number.parseInt(task.timestamp) / 60)}:
+              {(Number.parseInt(task.timestamp) % 60).toString().padStart(2, "0")}
+            </div>
           )}
         </div>
       )}

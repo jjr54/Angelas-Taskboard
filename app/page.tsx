@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Plus, RefreshCw, Settings } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Plus, RefreshCw, Settings, Youtube, ExternalLink } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -58,6 +60,10 @@ export default function MusicCompositionBoard() {
   const [airtableConfig, setAirtableConfig] = useState({
     tableName: "Tasks",
   })
+  const [globalYoutubeUrl, setGlobalYoutubeUrl] = useState("https://www.youtube.com/watch?v=nA8KmHC2Z-g")
+  const [youtubePreviewUrl, setYoutubePreviewUrl] = useState("")
+
+  const configDialogRef = useRef<HTMLDivElement>(null)
 
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -65,8 +71,9 @@ export default function MusicCompositionBoard() {
   const [isConfigured, setIsConfigured] = useState(false)
   const [shouldFetchTasks, setShouldFetchTasks] = useState(false)
 
-  // Load saved config on initial mount only
+  // Load saved config and YouTube URL on initial mount
   useEffect(() => {
+    // Load Airtable config
     const savedConfig = localStorage.getItem("airtableConfig")
     if (savedConfig) {
       try {
@@ -82,7 +89,40 @@ export default function MusicCompositionBoard() {
       // No saved config, show config dialog
       setIsConfigOpen(true)
     }
+
+    // Load saved YouTube URL
+    const savedYoutubeUrl = localStorage.getItem("globalYoutubeUrl")
+    if (savedYoutubeUrl) {
+      setGlobalYoutubeUrl(savedYoutubeUrl)
+      updateYoutubePreview(savedYoutubeUrl)
+    } else {
+      updateYoutubePreview(globalYoutubeUrl)
+    }
   }, [])
+
+  // Extract video ID from YouTube URL
+  const extractVideoId = (url: string): string | null => {
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/
+    const match = url.match(regExp)
+    return match && match[7].length === 11 ? match[7] : null
+  }
+
+  // Update YouTube preview thumbnail
+  const updateYoutubePreview = (url: string) => {
+    const videoId = extractVideoId(url)
+    if (videoId) {
+      setYoutubePreviewUrl(`https://img.youtube.com/vi/${videoId}/0.jpg`)
+    } else {
+      setYoutubePreviewUrl("")
+    }
+  }
+
+  // Save YouTube URL to localStorage and update preview
+  const handleYoutubeUrlChange = (url: string) => {
+    setGlobalYoutubeUrl(url)
+    localStorage.setItem("globalYoutubeUrl", url)
+    updateYoutubePreview(url)
+  }
 
   // Fetch tasks when shouldFetchTasks is true
   useEffect(() => {
@@ -191,10 +231,17 @@ export default function MusicCompositionBoard() {
 
     // Update task in Airtable
     try {
-      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
-        method: "PATCH",
+      const response = await fetch(`/api/airtable/update`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updatedTask),
+        body: JSON.stringify({
+          recordId: updatedTask.id,
+          fields: {
+            status: updatedTask.status,
+            completed: updatedTask.completed,
+          },
+          tableName: airtableConfig.tableName,
+        }),
       })
 
       if (!response.ok) {
@@ -333,20 +380,36 @@ export default function MusicCompositionBoard() {
   const addTask = async (task: any) => {
     if (!task.title || !selectedColumn) return
 
+    // Extract the base64 screenshot if present
+    const { tempScreenshotBase64, ...taskData } = task
+
+    // Use the global YouTube URL if the task doesn't have one
+    if (!taskData.youtubeUrl && globalYoutubeUrl) {
+      taskData.youtubeUrl = globalYoutubeUrl
+    }
+
     // Optimistically update UI
+    const newTask = {
+      ...taskData,
+      id: Date.now().toString(),
+    }
+
     const newColumns = columns.map((col) => {
       if (col.id === selectedColumn) {
-        return { ...col, tasks: [...col.tasks, { ...task, id: Date.now().toString() }] }
+        return { ...col, tasks: [...col.tasks, newTask] }
       }
       return col
     })
+
     setColumns(newColumns)
+    setIsAddTaskOpen(false)
 
     try {
+      // First, create the task in Airtable
       const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(task),
+        body: JSON.stringify(taskData),
       })
 
       if (!response.ok) {
@@ -356,16 +419,42 @@ export default function MusicCompositionBoard() {
 
       const createdTask = await response.json()
 
-      // Update with real ID from Airtable
+      // If we have a screenshot, upload it to Cloudinary and update Airtable
+      if (tempScreenshotBase64) {
+        try {
+          const uploadResponse = await fetch("/api/uploadScreenshot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              base64Image: tempScreenshotBase64,
+              airtableRecordId: createdTask.id,
+            }),
+          })
+
+          if (uploadResponse.ok) {
+            const uploadData = await uploadResponse.json()
+            // Update the task with the Cloudinary URL
+            createdTask.screenshotUrl = uploadData.imageUrl
+          } else {
+            console.error("Failed to upload screenshot to Cloudinary")
+          }
+        } catch (uploadError) {
+          console.error("Error uploading screenshot:", uploadError)
+          // Continue even if screenshot upload fails
+        }
+      }
+
+      // Update with real ID and screenshot URL from Airtable
       const updatedColumns = columns.map((col) => {
         if (col.id === selectedColumn) {
           return {
             ...col,
-            tasks: col.tasks.map((t) => (t.id === task.id ? { ...t, id: createdTask.id } : t)),
+            tasks: col.tasks.map((t) => (t.id === newTask.id ? { ...createdTask } : t)),
           }
         }
         return col
       })
+
       setColumns(updatedColumns)
 
       toast({
@@ -379,11 +468,20 @@ export default function MusicCompositionBoard() {
         description: "Failed to create task in Airtable",
         variant: "destructive",
       })
-      // Revert changes on error
-      setShouldFetchTasks(true)
-    }
 
-    setIsAddTaskOpen(false)
+      // Remove the task from UI on error
+      const revertedColumns = columns.map((col) => {
+        if (col.id === selectedColumn) {
+          return {
+            ...col,
+            tasks: col.tasks.filter((t) => t.id !== newTask.id),
+          }
+        }
+        return col
+      })
+
+      setColumns(revertedColumns)
+    }
   }
 
   const handleRetry = useCallback(() => {
@@ -410,7 +508,72 @@ export default function MusicCompositionBoard() {
           </div>
         </div>
 
-        <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
+        {/* YouTube Preview Section */}
+        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
+          <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">Default YouTube Reference</h2>
+          <div className="grid md:grid-cols-3 gap-4">
+            <div className="md:col-span-1">
+              {youtubePreviewUrl ? (
+                <div className="relative aspect-video rounded-md overflow-hidden border dark:border-gray-700">
+                  <img
+                    src={youtubePreviewUrl || "/placeholder.svg"}
+                    alt="YouTube thumbnail"
+                    className="w-full h-full object-cover"
+                  />
+                  <a
+                    href={globalYoutubeUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 opacity-0 hover:opacity-100 transition-opacity"
+                  >
+                    <Button variant="secondary" size="sm">
+                      <Youtube className="h-4 w-4 mr-2" />
+                      Watch Video
+                    </Button>
+                  </a>
+                </div>
+              ) : (
+                <div className="aspect-video rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
+                  <p className="text-gray-500 dark:text-gray-400 text-sm">No video preview</p>
+                </div>
+              )}
+            </div>
+            <div className="md:col-span-2">
+              <div className="grid gap-4">
+                <div>
+                  <Label htmlFor="globalYoutubeUrl">YouTube URL</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="globalYoutubeUrl"
+                      value={globalYoutubeUrl}
+                      onChange={(e) => handleYoutubeUrlChange(e.target.value)}
+                      placeholder="e.g., https://www.youtube.com/watch?v=nA8KmHC2Z-g"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={() => window.open(globalYoutubeUrl, "_blank")}
+                      title="Open in new tab"
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    This URL will be used as the default for all new tasks
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Airtable Config Dialog */}
+        <Dialog
+          open={isConfigOpen}
+          onOpenChange={(open) => {
+            setIsConfigOpen(open)
+          }}
+        >
           <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
         </Dialog>
 

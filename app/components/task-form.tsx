@@ -1,13 +1,13 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DialogHeader, DialogTitle, DialogContent } from "@/components/ui/dialog"
-import { Loader2, Youtube } from "lucide-react"
+import { Loader2, Camera } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
 interface TaskFormProps {
@@ -26,35 +26,30 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
     type: "composition" as "composition" | "arrangement" | "recording" | "mixing" | "review",
     duration: "",
     instruments: [] as string[],
-    youtubeUrl: "https://www.youtube.com/watch?v=nA8KmHC2Z-g", // Default video
-    timestamp: "0", // Default timestamp
+    youtubeUrl: "",
+    timestamp: "0",
     screenshotUrl: "",
-    boardId: columnId, // Keep track of board ID
+    boardId: columnId,
   })
 
+  const [instrumentsInput, setInstrumentsInput] = useState("")
   const [isGeneratingScreenshot, setIsGeneratingScreenshot] = useState(false)
+  const [tempScreenshotBase64, setTempScreenshotBase64] = useState("")
   const { toast } = useToast()
 
-  const generateThumbnail = async (base64Image: string, airtableRecordId: string) => {
-    const response = await fetch("/api/uploadScreenshot", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ base64Image, airtableRecordId }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok) {
-      console.error("Thumbnail generation failed:", result.error || result);
-      return null;
+  // Load default YouTube URL from localStorage
+  useEffect(() => {
+    const savedYoutubeUrl = localStorage.getItem("globalYoutubeUrl")
+    if (savedYoutubeUrl) {
+      setNewTask((prev) => ({
+        ...prev,
+        youtubeUrl: savedYoutubeUrl,
+      }))
     }
-
-    return result.imageUrl;
-  };
+  }, [])
 
   const handleInstrumentChange = (value: string) => {
+    setInstrumentsInput(value)
     const instruments = value
       .split(",")
       .map((i) => i.trim())
@@ -84,6 +79,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
 
       const timestamp = Number.parseInt(newTask.timestamp) || 0
 
+      // Generate screenshot
       const response = await fetch("/api/youtube-screenshot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -97,6 +93,8 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
 
       const data = await response.json()
 
+      // Store the base64 screenshot temporarily
+      setTempScreenshotBase64(data.screenshot)
       setNewTask({
         ...newTask,
         screenshotUrl: data.screenshot,
@@ -104,7 +102,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
 
       toast({
         title: "Screenshot Generated",
-        description: "YouTube video screenshot has been generated",
+        description: `Screenshot captured at ${timestamp} seconds`,
       })
     } catch (error) {
       console.error("Error generating screenshot:", error)
@@ -118,7 +116,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
     }
   }
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!newTask.title) return
 
     const task = {
@@ -138,12 +136,15 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
       },
     }
 
-    // Ensure task is saved with the board information
-    onAddTask(task)
+    // Pass the base64 screenshot data along with the task
+    onAddTask({
+      ...task,
+      tempScreenshotBase64: tempScreenshotBase64,
+    })
   }
 
   return (
-    <DialogContent className="sm:max-w-[500px]">
+    <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
       <DialogHeader>
         <DialogTitle>Add New Task</DialogTitle>
       </DialogHeader>
@@ -165,12 +166,15 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             value={newTask.description}
             onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             placeholder="Describe the musical task..."
+            rows={3}
           />
         </div>
 
-        <div className="grid gap-2">
-          <Label htmlFor="youtubeUrl">YouTube Video URL</Label>
-          <div className="flex gap-2">
+        <div className="space-y-4 border rounded-lg p-4 bg-gray-50 dark:bg-gray-900">
+          <h3 className="font-medium text-sm">YouTube Reference</h3>
+
+          <div className="grid gap-2">
+            <Label htmlFor="youtubeUrl">YouTube Video URL</Label>
             <Input
               id="youtubeUrl"
               value={newTask.youtubeUrl}
@@ -178,49 +182,57 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
               placeholder="e.g., https://www.youtube.com/watch?v=nA8KmHC2Z-g"
             />
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="timestamp">Timestamp (seconds)</Label>
-            <Input
-              id="timestamp"
-              type="number"
-              min="0"
-              value={newTask.timestamp}
-              onChange={(e) => setNewTask({ ...newTask, timestamp: e.target.value })}
-              placeholder="e.g., 30"
-            />
-          </div>
-          <div className="flex items-end">
-            <Button type="button" onClick={generateScreenshot} disabled={isGeneratingScreenshot} className="w-full">
-              {isGeneratingScreenshot ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <Youtube className="mr-2 h-4 w-4" />
-                  Generate Screenshot
-                </>
-              )}
-            </Button>
-          </div>
-        </div>
-
-        {newTask.screenshotUrl && (
-          <div className="grid gap-2">
-            <Label>Preview</Label>
-            <div className="border rounded-md overflow-hidden">
-              <img
-                src={newTask.screenshotUrl || "/placeholder.svg"}
-                alt="YouTube video screenshot"
-                className="w-full h-auto"
+          <div className="grid grid-cols-2 gap-4">
+            <div className="grid gap-2">
+              <Label htmlFor="timestamp">Timestamp (seconds)</Label>
+              <Input
+                id="timestamp"
+                type="number"
+                min="0"
+                value={newTask.timestamp}
+                onChange={(e) => setNewTask({ ...newTask, timestamp: e.target.value })}
+                placeholder="e.g., 30"
               />
             </div>
+            <div className="flex items-end">
+              <Button
+                type="button"
+                onClick={generateScreenshot}
+                disabled={isGeneratingScreenshot || !newTask.youtubeUrl}
+                className="w-full"
+              >
+                {isGeneratingScreenshot ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Capturing...
+                  </>
+                ) : (
+                  <>
+                    <Camera className="mr-2 h-4 w-4" />
+                    Take Screenshot
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
-        )}
+
+          {newTask.screenshotUrl && (
+            <div className="grid gap-2">
+              <Label>Screenshot Preview</Label>
+              <div className="border rounded-md overflow-hidden bg-white">
+                <img
+                  src={newTask.screenshotUrl || "/placeholder.svg"}
+                  alt="YouTube video screenshot"
+                  className="w-full h-auto"
+                />
+              </div>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                This screenshot will be uploaded to Cloudinary when you create the task
+              </p>
+            </div>
+          )}
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
@@ -293,13 +305,14 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
           <Label htmlFor="instruments">Instruments (comma-separated)</Label>
           <Input
             id="instruments"
-            value={newTask.instruments.join(", ")}
+            value={instrumentsInput}
             onChange={(e) => handleInstrumentChange(e.target.value)}
             placeholder="e.g., Piano, Strings, Orchestra"
           />
+          <p className="text-xs text-gray-500 dark:text-gray-400">Separate multiple instruments with commas</p>
         </div>
 
-        <div className="flex justify-end gap-2">
+        <div className="flex justify-end gap-2 pt-4">
           <Button variant="outline" onClick={onCancel}>
             Cancel
           </Button>
