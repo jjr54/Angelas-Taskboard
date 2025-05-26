@@ -531,7 +531,7 @@ function transformAirtableRecord(record: any) {
     dueDate: record.fields.due_date || "",
     priority: (record.fields.priority || "medium").toLowerCase(),
     type: (record.fields.type || "composition").toLowerCase().replace(/\s+/g, ""),
-    duration: record.fields.duration || "",
+    duration: typeof record.fields.duration === "number" ? record.fields.duration : null,
     instruments: record.fields.instruments || [],
     status: (record.fields.status || "todo").toLowerCase().replace(/\s+/g, ""),
     completed: record.fields.completed || false,
