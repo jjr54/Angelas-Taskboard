@@ -205,10 +205,37 @@ export async function POST(request: Request) {
     if (body.completed !== undefined) fields.completed = body.completed
     if (body.dueDate) fields.due_date = body.dueDate
 
-    // YouTube related fields
-    if (body.youtubeUrl) fields.youtube_url = body.youtubeUrl
-    if (body.timestamp) fields.timestamp = body.timestamp
-    if (body.screenshotUrl) fields.screenshot_url = body.screenshotUrl
+const body = await request.json();
+const { title, description, duration, ...rest } = body;
+
+// Convert duration from minutes (or string input) to seconds
+let durationInSeconds = 0;
+if (duration) {
+  const parsed = parseFloat(duration);
+  if (!isNaN(parsed)) {
+    durationInSeconds = Math.round(parsed * 60); // e.g. 30 minutes → 1800 seconds
+  }
+}
+
+const airtableResponse = await fetch(
+  `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/${process.env.AIRTABLE_TABLE_NAME}`,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.AIRTABLE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      fields: {
+        title,
+        description,
+        duration: durationInSeconds,
+        ...rest,
+      },
+    }),
+  }
+);
+
 
     // Assignee fields - only add if they exist and are properly structured
     if (body.assignee) {
