@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -68,50 +67,36 @@ export function AirtableConfig({ onConfigSaved, initialTableName = "Tasks" }: Ai
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>Airtable Configuration</CardTitle>
-        <CardDescription>Configure your Airtable connection to store and retrieve tasks</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="tableName">Table Name</Label>
-          <div className="flex gap-2">
-            <Input
-              id="tableName"
-              value={tableName}
-              onChange={(e) => setTableName(e.target.value)}
-              placeholder="Enter your Airtable table name"
-            />
-            <Button variant="outline" size="icon" onClick={fetchTables} disabled={isLoading}>
-              {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "↻"}
-            </Button>
-          </div>
-          {availableTables.length > 0 && (
-            <div className="mt-2">
-              <Label className="text-xs text-gray-500 dark:text-gray-400">Available tables:</Label>
-              <div className="mt-1 flex flex-wrap gap-1">
-                {availableTables.map((table) => (
-                  <Button
-                    key={table}
-                    variant="outline"
-                    size="sm"
-                    className="text-xs"
-                    onClick={() => setTableName(table)}
-                  >
-                    {table}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
+    <div className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="tableName">Table Name</Label>
+        <div className="flex gap-2">
+          <Input
+            id="tableName"
+            value={tableName}
+            onChange={(e) => setTableName(e.target.value)}
+            placeholder="Enter your Airtable table name"
+          />
+          <Button variant="outline" size="icon" onClick={fetchTables} disabled={isLoading}>
+            {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "↻"}
+          </Button>
         </div>
-      </CardContent>
-      <CardFooter>
-        <Button onClick={saveConfig} className="w-full">
-          Save Configuration
-        </Button>
-      </CardFooter>
-    </Card>
+        {availableTables.length > 0 && (
+          <div className="mt-2">
+            <Label className="text-xs text-gray-500 dark:text-gray-400">Available tables:</Label>
+            <div className="mt-1 flex flex-wrap gap-1">
+              {availableTables.map((table) => (
+                <Button key={table} variant="outline" size="sm" className="text-xs" onClick={() => setTableName(table)}>
+                  {table}
+                </Button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      <Button onClick={saveConfig} className="w-full">
+        Save Configuration
+      </Button>
+    </div>
   )
 }

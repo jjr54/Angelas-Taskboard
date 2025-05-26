@@ -1,22 +1,30 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { DragDropContext, Droppable, Draggable } from "@hello-pangea/dnd"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, RefreshCw, Settings, Youtube, ExternalLink } from "lucide-react"
+import { Plus, RefreshCw, Settings, Youtube, ExternalLink, Menu } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AirtableConfig } from "./components/airtable-config"
 import { ThemeToggle } from "./components/theme-toggle"
 import { DebugButton } from "./components/debug-button"
 import { TaskForm } from "./components/task-form"
 import { TaskCard } from "./components/task-card"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu"
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
+import { AirtableConfig } from "./components/airtable-config"
 
 interface Task {
   id: string
@@ -55,15 +63,13 @@ const initialData: Column[] = [
 export default function MusicCompositionBoard() {
   const [columns, setColumns] = useState<Column[]>(initialData)
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false)
-  const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isConfigSheetOpen, setIsConfigSheetOpen] = useState(false)
   const [selectedColumn, setSelectedColumn] = useState("")
   const [airtableConfig, setAirtableConfig] = useState({
     tableName: "Tasks",
   })
   const [globalYoutubeUrl, setGlobalYoutubeUrl] = useState("https://www.youtube.com/watch?v=nA8KmHC2Z-g")
   const [youtubePreviewUrl, setYoutubePreviewUrl] = useState("")
-
-  const configDialogRef = useRef<HTMLDivElement>(null)
 
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -83,11 +89,11 @@ export default function MusicCompositionBoard() {
         setShouldFetchTasks(true)
       } catch (e) {
         console.error("Error parsing saved config:", e)
-        setIsConfigOpen(true)
+        setIsConfigSheetOpen(true)
       }
     } else {
-      // No saved config, show config dialog
-      setIsConfigOpen(true)
+      // No saved config, show config sheet
+      setIsConfigSheetOpen(true)
     }
 
     // Load saved YouTube URL
@@ -184,7 +190,7 @@ export default function MusicCompositionBoard() {
   const handleConfigSaved = useCallback((config: { tableName: string }) => {
     setAirtableConfig(config)
     setIsConfigured(true)
-    setIsConfigOpen(false)
+    setIsConfigSheetOpen(false)
     setShouldFetchTasks(true)
   }, [])
 
@@ -237,7 +243,12 @@ export default function MusicCompositionBoard() {
         body: JSON.stringify({
           recordId: updatedTask.id,
           fields: {
-            status: updatedTask.status,
+            status: updatedTask.status
+              ?.split("")
+              .map((char: string, i: number) =>
+                i === 0 || updatedTask.status![i - 1] === " " ? char.toUpperCase() : char,
+              )
+              .join(""),
             completed: updatedTask.completed,
           },
           tableName: airtableConfig.tableName,
@@ -313,28 +324,16 @@ export default function MusicCompositionBoard() {
     const taskToDuplicate = column.tasks.find((task) => task.id === taskId)
     if (!taskToDuplicate) return
 
-    // Create a duplicate with a new ID
-    const duplicatedTask: Task = {
-      ...taskToDuplicate,
-      id: `duplicate-${Date.now()}`,
+    // Create a duplicate without the ID
+    const { id, ...taskWithoutId } = taskToDuplicate
+    const duplicatedTask = {
+      ...taskWithoutId,
       title: `${taskToDuplicate.title} (Copy)`,
+      status: columnId,
     }
 
-    // Update UI optimistically
-    const newColumns = columns.map((col) => {
-      if (col.id === columnId) {
-        return {
-          ...col,
-          tasks: [...col.tasks, duplicatedTask],
-        }
-      }
-      return col
-    })
-
-    setColumns(newColumns)
-
-    // Create the duplicated task in Airtable
     try {
+      // Create the duplicated task in Airtable
       const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -348,18 +347,18 @@ export default function MusicCompositionBoard() {
 
       const createdTask = await response.json()
 
-      // Update with real ID from Airtable
-      const updatedColumns = columns.map((col) => {
+      // Add the new task to the UI
+      const newColumns = columns.map((col) => {
         if (col.id === columnId) {
           return {
             ...col,
-            tasks: col.tasks.map((t) => (t.id === duplicatedTask.id ? { ...t, id: createdTask.id } : t)),
+            tasks: [...col.tasks, createdTask],
           }
         }
         return col
       })
 
-      setColumns(updatedColumns)
+      setColumns(newColumns)
 
       toast({
         title: "Success",
@@ -372,8 +371,6 @@ export default function MusicCompositionBoard() {
         description: "Failed to duplicate task in Airtable",
         variant: "destructive",
       })
-      // Revert changes on error
-      setShouldFetchTasks(true)
     }
   }
 
@@ -388,20 +385,6 @@ export default function MusicCompositionBoard() {
       taskData.youtubeUrl = globalYoutubeUrl
     }
 
-    // Optimistically update UI
-    const newTask = {
-      ...taskData,
-      id: Date.now().toString(),
-    }
-
-    const newColumns = columns.map((col) => {
-      if (col.id === selectedColumn) {
-        return { ...col, tasks: [...col.tasks, newTask] }
-      }
-      return col
-    })
-
-    setColumns(newColumns)
     setIsAddTaskOpen(false)
 
     try {
@@ -444,18 +427,18 @@ export default function MusicCompositionBoard() {
         }
       }
 
-      // Update with real ID and screenshot URL from Airtable
-      const updatedColumns = columns.map((col) => {
+      // Add the created task to the UI
+      const newColumns = columns.map((col) => {
         if (col.id === selectedColumn) {
           return {
             ...col,
-            tasks: col.tasks.map((t) => (t.id === newTask.id ? { ...createdTask } : t)),
+            tasks: [...col.tasks, createdTask],
           }
         }
         return col
       })
 
-      setColumns(updatedColumns)
+      setColumns(newColumns)
 
       toast({
         title: "Success",
@@ -468,19 +451,6 @@ export default function MusicCompositionBoard() {
         description: "Failed to create task in Airtable",
         variant: "destructive",
       })
-
-      // Remove the task from UI on error
-      const revertedColumns = columns.map((col) => {
-        if (col.id === selectedColumn) {
-          return {
-            ...col,
-            tasks: col.tasks.filter((t) => t.id !== newTask.id),
-          }
-        }
-        return col
-      })
-
-      setColumns(revertedColumns)
     }
   }
 
@@ -501,10 +471,25 @@ export default function MusicCompositionBoard() {
           <div className="flex items-center gap-2">
             <DebugButton />
             <ThemeToggle />
-            <Button variant="outline" size="sm" onClick={() => setIsConfigOpen(true)}>
-              <Settings className="h-4 w-4 mr-2" />
-              Configure Airtable
-            </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <Menu className="h-4 w-4" />
+                  <span className="sr-only">Menu</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => setIsConfigSheetOpen(true)}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  Configure Airtable
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={handleRetry}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh Tasks
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
 
@@ -567,22 +552,24 @@ export default function MusicCompositionBoard() {
           </div>
         </div>
 
-        {/* Airtable Config Dialog */}
-        <Dialog
-          open={isConfigOpen}
-          onOpenChange={(open) => {
-            setIsConfigOpen(open)
-          }}
-        >
-          <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
-        </Dialog>
+        {/* Airtable Config Sheet */}
+        <Sheet open={isConfigSheetOpen} onOpenChange={setIsConfigSheetOpen}>
+          <SheetContent>
+            <SheetHeader>
+              <SheetTitle>Airtable Configuration</SheetTitle>
+            </SheetHeader>
+            <div className="mt-6">
+              <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
+            </div>
+          </SheetContent>
+        </Sheet>
 
-        {!isConfigured && !isConfigOpen && (
+        {!isConfigured && !isConfigSheetOpen && (
           <Alert className="mb-6">
             <AlertTitle>Airtable not configured</AlertTitle>
             <AlertDescription className="flex flex-col gap-2">
               <p>Please configure your Airtable connection to continue.</p>
-              <Button variant="outline" size="sm" className="w-fit" onClick={() => setIsConfigOpen(true)}>
+              <Button variant="outline" size="sm" className="w-fit" onClick={() => setIsConfigSheetOpen(true)}>
                 <Settings className="h-4 w-4 mr-2" />
                 Configure Airtable
               </Button>
