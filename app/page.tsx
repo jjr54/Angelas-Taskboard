@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Plus, RefreshCw, Settings, Youtube, ExternalLink, Menu } from "lucide-react"
+import { Plus, RefreshCw, Settings, Youtube, ExternalLink, Menu, Bug } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Dialog, DialogTrigger } from "@/components/ui/dialog"
 import { useToast } from "@/hooks/use-toast"
@@ -71,6 +71,8 @@ export default function MusicCompositionBoard() {
   const [globalYoutubeUrl, setGlobalYoutubeUrl] = useState("https://www.youtube.com/watch?v=nA8KmHC2Z-g")
   const [youtubePreviewUrl, setYoutubePreviewUrl] = useState("")
   const [isSubmittingTask, setIsSubmittingTask] = useState(false)
+  const [isCreatingTestTask, setIsCreatingTestTask] = useState(false)
+  const [apiResponse, setApiResponse] = useState<any>(null)
 
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -405,12 +407,14 @@ export default function MusicCompositionBoard() {
         body: JSON.stringify(taskData),
       })
 
+      const responseData = await response.json()
+      console.log("API Response:", responseData)
+
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `API error: ${response.status} ${response.statusText}`)
+        throw new Error(responseData.error || `API error: ${response.status} ${response.statusText}`)
       }
 
-      const createdTask = await response.json()
+      const createdTask = responseData
       console.log("Task created successfully:", createdTask)
 
       // If we have a screenshot, upload it to Cloudinary and update Airtable
@@ -472,6 +476,90 @@ export default function MusicCompositionBoard() {
     }
   }
 
+  // Function to create a simple test task
+  const createTestTask = async () => {
+    setIsCreatingTestTask(true)
+    setApiResponse(null)
+
+    try {
+      // Create a simple test task
+      const testTask = {
+        title: `Test Task ${new Date().toLocaleTimeString()}`,
+        description: "This is a test task to check Airtable connectivity",
+        status: "todo",
+        priority: "medium",
+        type: "composition",
+        assignee: {
+          name: "Test User",
+          avatar: "/placeholder.svg?height=32&width=32",
+          initials: "TU",
+        },
+        completed: false,
+      }
+
+      console.log("Creating test task:", testTask)
+
+      // Send the request directly to the API
+      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(testTask),
+      })
+
+      // Get the full response text for debugging
+      const responseText = await response.text()
+      console.log("Raw API Response:", responseText)
+
+      // Try to parse as JSON
+      let responseData
+      try {
+        responseData = JSON.parse(responseText)
+      } catch (e) {
+        responseData = { error: "Invalid JSON response", rawText: responseText }
+      }
+
+      // Store the response for display
+      setApiResponse(responseData)
+
+      if (!response.ok) {
+        throw new Error(
+          responseData.error || responseData.details || `API error: ${response.status} ${response.statusText}`,
+        )
+      }
+
+      // Add the created task to the UI
+      const createdTask = responseData
+      const newColumns = columns.map((col) => {
+        if (col.id === "todo") {
+          return {
+            ...col,
+            tasks: [...col.tasks, createdTask],
+          }
+        }
+        return col
+      })
+
+      setColumns(newColumns)
+
+      toast({
+        title: "Test Task Created",
+        description: "Test task was successfully created in Airtable",
+      })
+
+      // Refresh the task list
+      setShouldFetchTasks(true)
+    } catch (error) {
+      console.error("Error creating test task:", error)
+      toast({
+        title: "Error",
+        description: `Failed to create test task: ${error instanceof Error ? error.message : String(error)}`,
+        variant: "destructive",
+      })
+    } finally {
+      setIsCreatingTestTask(false)
+    }
+  }
+
   const handleRetry = useCallback(() => {
     setShouldFetchTasks(true)
   }, [])
@@ -501,6 +589,10 @@ export default function MusicCompositionBoard() {
                   <Settings className="mr-2 h-4 w-4" />
                   Configure Airtable
                 </DropdownMenuItem>
+                <DropdownMenuItem onClick={createTestTask} disabled={isCreatingTestTask || !isConfigured}>
+                  <Bug className="mr-2 h-4 w-4" />
+                  {isCreatingTestTask ? "Creating Test Task..." : "Create Test Task"}
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleRetry}>
                   <RefreshCw className="mr-2 h-4 w-4" />
@@ -510,6 +602,21 @@ export default function MusicCompositionBoard() {
             </DropdownMenu>
           </div>
         </div>
+
+        {/* API Response Display (for debugging) */}
+        {apiResponse && (
+          <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
+            <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">API Response</h2>
+            <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded-md overflow-auto max-h-[300px]">
+              <pre className="text-xs">{JSON.stringify(apiResponse, null, 2)}</pre>
+            </div>
+            <div className="mt-2 flex justify-end">
+              <Button variant="outline" size="sm" onClick={() => setApiResponse(null)}>
+                Dismiss
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* YouTube Preview Section */}
         <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">

@@ -115,7 +115,10 @@ export async function POST(request: Request) {
 
     // Check if environment variables are set
     if (!AIRTABLE_ACCESS_TOKEN || !AIRTABLE_BASE_ID) {
-      console.error("Missing Airtable environment variables")
+      console.error("Missing Airtable environment variables:", {
+        hasToken: !!AIRTABLE_ACCESS_TOKEN,
+        hasBaseId: !!AIRTABLE_BASE_ID,
+      })
       return NextResponse.json({ error: "Server configuration error: Missing Airtable credentials" }, { status: 500 })
     }
 
@@ -124,9 +127,25 @@ export async function POST(request: Request) {
       "Content-Type": "application/json",
     }
 
-    const body = await request.json()
+    // Get the request body
+    const requestText = await request.text()
+    console.log("Raw request body:", requestText)
+
+    // Parse the request body
+    let body
+    try {
+      body = JSON.parse(requestText)
+    } catch (e) {
+      console.error("Error parsing request body:", e)
+      return NextResponse.json(
+        { error: "Invalid JSON in request body", details: (e as Error).message },
+        { status: 400 },
+      )
+    }
+
     console.log("Creating task with data:", body)
 
+    // Format the data for Airtable
     const airtableData = {
       fields: {
         title: body.title,
@@ -150,6 +169,8 @@ export async function POST(request: Request) {
       },
     }
 
+    console.log("Formatted Airtable data:", airtableData)
+
     const apiUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}`
     console.log(`Posting to Airtable: ${apiUrl}`)
 
@@ -159,26 +180,63 @@ export async function POST(request: Request) {
       body: JSON.stringify(airtableData),
     })
 
+    // Get the raw response for debugging
+    const responseText = await response.text()
+    console.log("Raw Airtable response:", responseText)
+
+    // Parse the response
+    let data
+    try {
+      data = JSON.parse(responseText)
+    } catch (e) {
+      console.error("Error parsing Airtable response:", e)
+      return NextResponse.json(
+        {
+          error: "Invalid JSON in Airtable response",
+          details: (e as Error).message,
+          rawResponse: responseText,
+        },
+        { status: 500 },
+      )
+    }
+
     if (!response.ok) {
-      const errorText = await response.text()
-      console.error(`Airtable API error: ${response.status} ${response.statusText}`, errorText)
+      console.error(`Airtable API error: ${response.status} ${response.statusText}`, data)
       return NextResponse.json(
         {
           error: `Airtable API error: ${response.status} ${response.statusText}`,
-          details: errorText,
+          details: data,
         },
         { status: response.status },
       )
     }
 
-    const data = await response.json()
     console.log("Successfully created task:", data)
 
-    // Return the created task with the Airtable ID
-    return NextResponse.json({
+    // Transform the Airtable response to match our Task interface
+    const createdTask = {
       id: data.id,
-      ...body,
-    })
+      title: data.fields.title || body.title || "",
+      description: data.fields.description || body.description || "",
+      assignee: {
+        name: data.fields.assignee_name || body.assignee?.name || "Unassigned",
+        avatar: data.fields.assignee_avatar || body.assignee?.avatar || "/placeholder.svg?height=32&width=32",
+        initials: data.fields.assignee_initials || body.assignee?.initials || "UN",
+      },
+      dueDate: data.fields.due_date || body.dueDate || "",
+      priority: (data.fields.priority || body.priority || "medium").toLowerCase(),
+      type: (data.fields.type || body.type || "composition").toLowerCase().replace(/\s+/g, ""),
+      duration: data.fields.duration || body.duration || "",
+      instruments: data.fields.instruments || body.instruments || [],
+      status: (data.fields.status || body.status || "todo").toLowerCase().replace(/\s+/g, ""),
+      completed: data.fields.completed || body.completed || false,
+      youtubeUrl: data.fields.youtube_url || body.youtubeUrl || "",
+      timestamp: data.fields.timestamp || body.timestamp || "",
+      screenshotUrl: data.fields.screenshot_url || body.screenshotUrl || "",
+    }
+
+    // Return the created task with the Airtable ID
+    return NextResponse.json(createdTask)
   } catch (error) {
     console.error("Error creating task:", error)
     return NextResponse.json(
