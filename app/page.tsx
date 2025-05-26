@@ -154,16 +154,39 @@ export default function MusicCompositionBoard() {
 
       const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("API error response:", errorData)
-        throw new Error(errorData.error || `API error: ${response.status} ${response.statusText}`)
+      // Get the raw response text first
+      const responseText = await response.text()
+      console.log("Raw API response:", responseText)
+
+      // Check if the response is empty
+      if (!responseText.trim()) {
+        throw new Error("Empty response received from API")
       }
 
-      const data = await response.json()
+      // Try to parse the response as JSON
+      let data
+      try {
+        data = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error("JSON parse error:", parseError)
+        throw new Error(
+          `Failed to parse API response: ${parseError.message}. Raw response: ${responseText.substring(0, 100)}...`,
+        )
+      }
+
+      if (!response.ok) {
+        console.error("API error response:", data)
+        throw new Error(data.error || `API error: ${response.status} ${response.statusText}`)
+      }
 
       if (data.error) {
         throw new Error(data.error)
+      }
+
+      // Check if tasks array exists
+      if (!Array.isArray(data.tasks)) {
+        console.error("Invalid response format - tasks is not an array:", data)
+        throw new Error("Invalid response format: tasks array is missing")
       }
 
       // Group tasks by status
@@ -665,29 +688,32 @@ export default function MusicCompositionBoard() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-900 dark:to-gray-800 p-6 transition-colors duration-200">
-      <div className="max-w-7xl mx-auto">
+    <div className="min-h-screen bg-background text-foreground">
+      {/* Gradient background */}
+      <div className="absolute inset-0 bg-gradient-radial from-primary/20 via-background to-background -z-10"></div>
+
+      <div className="max-w-7xl mx-auto p-6">
         <div className="mb-8 flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Film Score Composition Board</h1>
-            <p className="text-gray-600 dark:text-gray-300">
-              Track and manage music composition tasks for your film project
-            </p>
+            <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-primary to-purple-300 mb-2">
+              Film Score Composition
+            </h1>
+            <p className="text-gray-400">Track and manage music composition tasks for your film project</p>
           </div>
           <div className="flex items-center gap-2">
             <DebugButton />
             <ThemeToggle />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon" className="rounded-full">
                   <Menu className="h-4 w-4" />
                   <span className="sr-only">Menu</span>
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuContent align="end" className="w-56 rounded-xl">
                 <DropdownMenuItem onClick={() => setIsConfigSheetOpen(true)}>
                   <Settings className="mr-2 h-4 w-4" />
-                  Configure Airtable
+                  Airtable Link
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={createTestTask} disabled={isCreatingTestTask || !isConfigured}>
                   <Bug className="mr-2 h-4 w-4" />
@@ -705,13 +731,13 @@ export default function MusicCompositionBoard() {
 
         {/* API Response Display (for debugging) */}
         {apiResponse && (
-          <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
-            <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">API Response</h2>
-            <div className="bg-gray-100 dark:bg-gray-900 p-4 rounded-md overflow-auto max-h-[300px]">
+          <div className="mb-8 glass-card rounded-xl p-4">
+            <h2 className="text-lg font-semibold mb-3 text-foreground">API Response</h2>
+            <div className="bg-secondary/50 p-4 rounded-xl overflow-auto max-h-[300px]">
               <pre className="text-xs">{JSON.stringify(apiResponse, null, 2)}</pre>
             </div>
             <div className="mt-2 flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => setApiResponse(null)}>
+              <Button variant="outline" size="sm" onClick={() => setApiResponse(null)} className="rounded-full">
                 Dismiss
               </Button>
             </div>
@@ -719,12 +745,12 @@ export default function MusicCompositionBoard() {
         )}
 
         {/* YouTube Preview Section */}
-        <div className="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700 p-4">
-          <h2 className="text-lg font-semibold mb-3 text-gray-900 dark:text-white">Default YouTube Reference</h2>
-          <div className="grid md:grid-cols-3 gap-4">
+        <div className="mb-8 glass-card rounded-xl p-6">
+          <h2 className="text-xl font-semibold mb-4 text-foreground">Default YouTube Reference</h2>
+          <div className="grid md:grid-cols-3 gap-6">
             <div className="md:col-span-1">
               {youtubePreviewUrl ? (
-                <div className="relative aspect-video rounded-md overflow-hidden border dark:border-gray-700">
+                <div className="relative aspect-video rounded-xl overflow-hidden border border-primary/20">
                   <img
                     src={youtubePreviewUrl || "/placeholder.svg"}
                     alt="YouTube thumbnail"
@@ -736,41 +762,43 @@ export default function MusicCompositionBoard() {
                     rel="noopener noreferrer"
                     className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-30 opacity-0 hover:opacity-100 transition-opacity"
                   >
-                    <Button variant="secondary" size="sm">
+                    <Button variant="secondary" size="sm" className="rounded-full">
                       <Youtube className="h-4 w-4 mr-2" />
                       Watch Video
                     </Button>
                   </a>
                 </div>
               ) : (
-                <div className="aspect-video rounded-md bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">No video preview</p>
+                <div className="aspect-video rounded-xl bg-secondary/50 flex items-center justify-center">
+                  <p className="text-gray-400 text-sm">No video preview</p>
                 </div>
               )}
             </div>
             <div className="md:col-span-2">
               <div className="grid gap-4">
                 <div>
-                  <Label htmlFor="globalYoutubeUrl">YouTube URL</Label>
+                  <Label htmlFor="globalYoutubeUrl" className="text-sm text-gray-400">
+                    YouTube URL
+                  </Label>
                   <div className="flex gap-2 mt-1">
                     <Input
                       id="globalYoutubeUrl"
                       value={globalYoutubeUrl}
                       onChange={(e) => handleYoutubeUrlChange(e.target.value)}
                       placeholder="e.g., https://www.youtube.com/watch?v=nA8KmHC2Z-g"
+                      className="rounded-full bg-secondary/50 border-primary/20 focus:border-primary"
                     />
                     <Button
                       variant="outline"
                       size="icon"
                       onClick={() => window.open(globalYoutubeUrl, "_blank")}
                       title="Open in new tab"
+                      className="rounded-full"
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
                   </div>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    This URL will be used as the default for all new tasks
-                  </p>
+                  <p className="text-xs text-gray-500 mt-1">This URL will be used as the default for all new tasks</p>
                 </div>
               </div>
             </div>
@@ -779,9 +807,9 @@ export default function MusicCompositionBoard() {
 
         {/* Airtable Config Sheet */}
         <Sheet open={isConfigSheetOpen} onOpenChange={setIsConfigSheetOpen}>
-          <SheetContent>
+          <SheetContent className="sm:max-w-md">
             <SheetHeader>
-              <SheetTitle>Airtable Configuration</SheetTitle>
+              <SheetTitle>Airtable Link</SheetTitle>
             </SheetHeader>
             <div className="mt-6">
               <AirtableConfig onConfigSaved={handleConfigSaved} initialTableName={airtableConfig.tableName} />
@@ -790,27 +818,49 @@ export default function MusicCompositionBoard() {
         </Sheet>
 
         {!isConfigured && !isConfigSheetOpen && (
-          <Alert className="mb-6">
-            <AlertTitle>Airtable not configured</AlertTitle>
+          <Alert className="mb-6 rounded-xl border-primary/20 bg-secondary/50">
+            <AlertTitle>Airtable not linked</AlertTitle>
             <AlertDescription className="flex flex-col gap-2">
-              <p>Please configure your Airtable connection to continue.</p>
-              <Button variant="outline" size="sm" className="w-fit" onClick={() => setIsConfigSheetOpen(true)}>
+              <p>Please link your Airtable to continue.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-fit rounded-full"
+                onClick={() => setIsConfigSheetOpen(true)}
+              >
                 <Settings className="h-4 w-4 mr-2" />
-                Configure Airtable
+                Link Airtable
               </Button>
             </AlertDescription>
           </Alert>
         )}
 
         {error && (
-          <Alert variant="destructive" className="mb-6">
+          <Alert variant="destructive" className="mb-6 rounded-xl">
             <AlertTitle>Error loading tasks</AlertTitle>
             <AlertDescription className="flex flex-col gap-2">
-              <p>{error}</p>
-              <Button variant="outline" size="sm" className="w-fit" onClick={handleRetry}>
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Retry
-              </Button>
+              <div className="text-sm overflow-auto max-h-[200px] whitespace-pre-wrap">{error}</div>
+              <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" className="w-fit rounded-full" onClick={handleRetry}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Retry
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-fit rounded-full"
+                  onClick={() => {
+                    console.log("Checking environment variables and configuration...")
+                    toast({
+                      title: "Debug Info",
+                      description: "Check the browser console for detailed debug information",
+                    })
+                  }}
+                >
+                  <Bug className="h-4 w-4 mr-2" />
+                  Debug
+                </Button>
+              </div>
             </AlertDescription>
           </Alert>
         )}
@@ -818,8 +868,8 @@ export default function MusicCompositionBoard() {
         {isLoading && (
           <div className="flex items-center justify-center py-12">
             <div className="text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-900 dark:border-gray-100 mx-auto"></div>
-              <p className="mt-4 text-gray-600 dark:text-gray-300">Loading tasks from Airtable...</p>
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+              <p className="mt-4 text-gray-400">Loading tasks from Airtable...</p>
             </div>
           </div>
         )}
@@ -828,14 +878,13 @@ export default function MusicCompositionBoard() {
           <DragDropContext onDragEnd={onDragEnd}>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {columns.map((column) => (
-                <div
-                  key={column.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border dark:border-gray-700"
-                >
-                  <div className="p-4 border-b dark:border-gray-700">
+                <div key={column.id} className="glass-card rounded-xl overflow-hidden">
+                  <div className="p-4 border-b border-primary/10 bg-secondary/30">
                     <div className="flex items-center justify-between">
-                      <h2 className="font-semibold text-gray-900 dark:text-white">{column.title}</h2>
-                      <Badge variant="secondary">{column.tasks.length}</Badge>
+                      <h2 className="font-semibold text-foreground">{column.title}</h2>
+                      <Badge variant="secondary" className="rounded-full bg-primary/20 text-primary-foreground">
+                        {column.tasks.length}
+                      </Badge>
                     </div>
                   </div>
 
@@ -844,10 +893,7 @@ export default function MusicCompositionBoard() {
                       <div
                         ref={provided.innerRef}
                         {...provided.droppableProps}
-                        className={cn(
-                          "p-4 min-h-[200px] space-y-3",
-                          snapshot.isDraggingOver && "bg-slate-50 dark:bg-gray-700/50",
-                        )}
+                        className={cn("p-4 min-h-[200px] space-y-4", snapshot.isDraggingOver && "bg-secondary/20")}
                       >
                         {column.tasks.map((task, index) => (
                           <Draggable key={task.id} draggableId={task.id} index={index}>
@@ -878,7 +924,7 @@ export default function MusicCompositionBoard() {
                           <DialogTrigger asChild>
                             <Button
                               variant="ghost"
-                              className="w-full border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 h-20"
+                              className="w-full border-2 border-dashed border-primary/20 hover:border-primary/40 h-20 rounded-xl"
                               onClick={() => {
                                 setSelectedColumn(column.id)
                                 setIsAddTaskOpen(true)
@@ -920,12 +966,12 @@ export default function MusicCompositionBoard() {
 
         {!isLoading && !error && isConfigured && (
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Card>
+            <Card className="glass-card border-primary/10 rounded-xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Team Progress</CardTitle>
+                <CardTitle className="text-sm text-gray-400">Team Progress</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-primary">
                   {Math.round(
                     ((columns.find((col) => col.id === "complete")?.tasks.length || 0) /
                       Math.max(
@@ -935,31 +981,31 @@ export default function MusicCompositionBoard() {
                       100,
                   ) + "%"}
                 </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Overall completion</p>
+                <p className="text-xs text-gray-500">Overall completion</p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="glass-card border-primary/10 rounded-xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Active Tasks</CardTitle>
+                <CardTitle className="text-sm text-gray-400">Active Tasks</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-primary">
                   {columns.reduce((acc, col) => acc + (col.id !== "complete" ? col.tasks.length : 0), 0)}
                 </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">In progress</p>
+                <p className="text-xs text-gray-500">In progress</p>
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="glass-card border-primary/10 rounded-xl">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Completed</CardTitle>
+                <CardTitle className="text-sm text-gray-400">Completed</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">
+                <div className="text-2xl font-bold text-primary">
                   {columns.find((col) => col.id === "complete")?.tasks.length || 0}
                 </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400">Tasks finished</p>
+                <p className="text-xs text-gray-500">Tasks finished</p>
               </CardContent>
             </Card>
           </div>

@@ -18,17 +18,17 @@ interface TaskCardProps {
 }
 
 const typeColors = {
-  composition: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200",
-  arrangement: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200",
-  recording: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200",
-  mixing: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200",
-  review: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200",
+  composition: "bg-blue-500/20 text-blue-300",
+  arrangement: "bg-green-500/20 text-green-300",
+  recording: "bg-purple-500/20 text-purple-300",
+  mixing: "bg-orange-500/20 text-orange-300",
+  review: "bg-yellow-500/20 text-yellow-300",
 }
 
 const priorityBorders = {
-  low: "border-blue-500 dark:border-blue-400",
-  medium: "border-yellow-500 dark:border-yellow-400",
-  high: "border-red-500 dark:border-red-400",
+  low: "border-blue-500/50",
+  medium: "border-yellow-500/50",
+  high: "border-red-500/50",
 }
 
 // Function to format date to MM/dd/YYYY
@@ -52,33 +52,33 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
       {...provided.draggableProps}
       {...provided.dragHandleProps}
       className={cn(
-        "cursor-grab active:cursor-grabbing transition-shadow border-l-[10px]",
+        "task-card cursor-grab active:cursor-grabbing transition-all border-l-[6px] rounded-xl bg-secondary/30 backdrop-blur-sm border border-primary/10",
         priorityBorders[task.priority],
-        snapshot.isDragging && "shadow-lg rotate-2",
+        snapshot.isDragging && "shadow-lg rotate-2 animate-pulse-glow",
         task.completed && "opacity-75",
       )}
     >
       {task.screenshotUrl && (
-        <div className="relative w-full h-40 overflow-hidden rounded-t-lg">
+        <div className="relative w-full h-40 overflow-hidden rounded-t-xl">
           <img
             src={task.screenshotUrl || "/placeholder.svg"}
             alt="Video screenshot"
             className="w-full h-full object-cover"
           />
-          {task.youtubeUrl && <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent" />}
+          {task.youtubeUrl && <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />}
           {task.youtubeUrl && (
             <a
               href={task.youtubeUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="absolute bottom-2 right-2 bg-red-600 text-white p-2 rounded-md hover:bg-red-700 transition-colors shadow-lg"
+              className="absolute bottom-2 right-2 bg-red-600 text-white p-2 rounded-full hover:bg-red-700 transition-colors shadow-lg"
               title="Open YouTube video"
             >
-              <Youtube className="h-5 w-5" />
+              <Youtube className="h-4 w-4" />
             </a>
           )}
           {task.timestamp && (
-            <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
+            <div className="absolute bottom-2 left-2 bg-black/70 text-white px-3 py-1 rounded-full text-xs">
               {Math.floor(Number.parseInt(task.timestamp) / 60)}:
               {(Number.parseInt(task.timestamp) % 60).toString().padStart(2, "0")}
             </div>
@@ -91,12 +91,12 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
           <CardTitle className="text-sm font-medium leading-tight">{task.title}</CardTitle>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
+              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full">
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">Task menu</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="rounded-xl">
               <DropdownMenuItem onClick={() => onEdit(task)}>
                 <Edit className="mr-2 h-4 w-4" />
                 Edit
@@ -105,7 +105,7 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
                 <Copy className="mr-2 h-4 w-4" />
                 Duplicate
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-red-600 dark:text-red-400">
+              <DropdownMenuItem onClick={() => onDelete(task.id)} className="text-red-400">
                 <Trash2 className="mr-2 h-4 w-4" />
                 Delete
               </DropdownMenuItem>
@@ -114,20 +114,17 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
-        <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2">{task.description}</p>
+        <p className="text-xs text-gray-400 line-clamp-2">{task.description}</p>
 
         <div className="flex flex-wrap gap-1">
-          <Badge
-            className={typeColors[task.type] || "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200"}
-            variant="secondary"
-          >
+          <Badge className={typeColors[task.type] || "bg-gray-500/20 text-gray-300"} variant="secondary">
             <Music className="w-3 h-3 mr-1" />
             {task.type}
           </Badge>
         </div>
 
         {task.duration && (
-          <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center text-xs text-gray-400">
             <Clock className="w-3 h-3 mr-1" />
             {task.duration}
           </div>
@@ -136,7 +133,11 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
         {task.instruments && task.instruments.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {task.instruments.map((instrument: string, i: number) => (
-              <Badge key={`${instrument}-${i}`} variant="outline" className="text-xs">
+              <Badge
+                key={`${instrument}-${i}`}
+                variant="outline"
+                className="text-xs rounded-full border-primary/20 text-gray-300"
+              >
                 {instrument}
               </Badge>
             ))}
@@ -144,13 +145,15 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
         )}
 
         <div className="flex items-center justify-between pt-2">
-          <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center text-xs text-gray-400">
             <Calendar className="w-3 h-3 mr-1" />
             {formatDate(task.dueDate)}
           </div>
-          <Avatar className="w-6 h-6">
+          <Avatar className="w-6 h-6 border border-primary/20">
             <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-            <AvatarFallback className="text-xs">{task.assignee.initials}</AvatarFallback>
+            <AvatarFallback className="text-xs bg-primary/20 text-primary-foreground">
+              {task.assignee.initials}
+            </AvatarFallback>
           </Avatar>
         </div>
       </CardContent>
