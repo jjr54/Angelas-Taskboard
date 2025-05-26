@@ -1,0 +1,268 @@
+import { NextResponse } from "next/server"
+
+// GET all tasks
+export async function GET(request: Request) {
+  try {
+    const AIRTABLE_ACCESS_TOKEN = process.env.AIRTABLE_ACCESS_TOKEN
+    const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME
+
+    // Get table name from query params or use default
+    const url = new URL(request.url)
+    const tableName = url.searchParams.get("table") || AIRTABLE_TABLE_NAME || "Tasks"
+
+    // Check if environment variables are set
+    if (!AIRTABLE_ACCESS_TOKEN || !AIRTABLE_BASE_ID) {
+      console.error("Missing Airtable environment variables:", {
+        hasToken: !!AIRTABLE_ACCESS_TOKEN,
+        hasBaseId: !!AIRTABLE_BASE_ID,
+      })
+      return NextResponse.json({ error: "Server configuration error: Missing Airtable credentials" }, { status: 500 })
+    }
+
+    // Log environment variables for debugging (without exposing full token)
+    console.log("Airtable credentials:", {
+      baseId: AIRTABLE_BASE_ID,
+      tableName: tableName,
+      tokenPrefix: AIRTABLE_ACCESS_TOKEN.substring(0, 5) + "...",
+    })
+
+    const headers = {
+      Authorization: `Bearer ${AIRTABLE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    }
+
+    const apiUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}`
+    console.log(`Fetching from Airtable: ${apiUrl}`)
+
+    const response = await fetch(apiUrl, {
+      method: "GET",
+      headers,
+      cache: "no-store",
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Airtable API error: ${response.status} ${response.statusText}`, errorText)
+
+      // Additional debugging for auth errors
+      if (response.status === 401 || response.status === 403) {
+        console.error("Authentication error. Check your Airtable token and permissions.")
+      }
+
+      return NextResponse.json(
+        {
+          error: `Airtable API error: ${response.status} ${response.statusText}`,
+          details: errorText,
+        },
+        { status: response.status },
+      )
+    }
+
+    const data = await response.json()
+
+    // Check if records exist
+    if (!data.records) {
+      console.error("Unexpected Airtable response format:", data)
+      return NextResponse.json({ error: "Invalid response from Airtable", details: data }, { status: 500 })
+    }
+
+    // Transform Airtable records to match our Task interface
+    const tasks = data.records.map((record: any) => ({
+      id: record.id,
+      title: record.fields.title || "",
+      description: record.fields.description || "",
+      assignee: {
+        name: record.fields.assignee_name || "Unassigned",
+        avatar: record.fields.assignee_avatar || "/placeholder.svg?height=32&width=32",
+        initials: record.fields.assignee_initials || "UN",
+      },
+      dueDate: record.fields.due_date || "",
+      priority: record.fields.priority?.toLowerCase() || "medium",
+      type: record.fields.type?.toLowerCase().replace(/\s+/g, "") || "composition",
+      duration: record.fields.duration || "",
+      instruments: record.fields.instruments || [],
+      status: record.fields.status?.toLowerCase().replace(/\s+/g, "") || "todo",
+      completed: record.fields.completed || false,
+    }))
+
+    return NextResponse.json({ tasks })
+  } catch (error) {
+    console.error("Error fetching tasks:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to fetch tasks",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+// POST new task
+export async function POST(request: Request) {
+  try {
+    const AIRTABLE_ACCESS_TOKEN = process.env.AIRTABLE_ACCESS_TOKEN
+    const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME
+
+    // Get table name from query params or use default
+    const url = new URL(request.url)
+    const tableName = url.searchParams.get("table") || AIRTABLE_TABLE_NAME || "Tasks"
+
+    // Check if environment variables are set
+    if (!AIRTABLE_ACCESS_TOKEN || !AIRTABLE_BASE_ID) {
+      console.error("Missing Airtable environment variables")
+      return NextResponse.json({ error: "Server configuration error: Missing Airtable credentials" }, { status: 500 })
+    }
+
+    const headers = {
+      Authorization: `Bearer ${AIRTABLE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    }
+
+    const body = await request.json()
+
+    const airtableData = {
+      fields: {
+        title: body.title,
+        description: body.description,
+        assignee_name: body.assignee.name,
+        assignee_avatar: body.assignee.avatar,
+        assignee_initials: body.assignee.initials,
+        due_date: body.dueDate,
+        priority: body.priority.charAt(0).toUpperCase() + body.priority.slice(1),
+        type: body.type.charAt(0).toUpperCase() + body.type.slice(1),
+        duration: body.duration,
+        instruments: body.instruments,
+        status: body.status
+          .split("")
+          .map((char: string, i: number) => (i === 0 || body.status[i - 1] === " " ? char.toUpperCase() : char))
+          .join(""),
+        completed: body.completed,
+      },
+    }
+
+    const apiUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}`
+    console.log(`Posting to Airtable: ${apiUrl}`)
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(airtableData),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Airtable API error: ${response.status} ${response.statusText}`, errorText)
+      return NextResponse.json(
+        {
+          error: `Airtable API error: ${response.status} ${response.statusText}`,
+          details: errorText,
+        },
+        { status: response.status },
+      )
+    }
+
+    const data = await response.json()
+
+    return NextResponse.json({
+      id: data.id,
+      ...body,
+    })
+  } catch (error) {
+    console.error("Error creating task:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to create task",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+// PATCH update task
+export async function PATCH(request: Request) {
+  try {
+    const AIRTABLE_ACCESS_TOKEN = process.env.AIRTABLE_ACCESS_TOKEN
+    const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID
+    const AIRTABLE_TABLE_NAME = process.env.AIRTABLE_TABLE_NAME
+
+    // Get table name from query params or use default
+    const url = new URL(request.url)
+    const tableName = url.searchParams.get("table") || AIRTABLE_TABLE_NAME || "Tasks"
+
+    // Check if environment variables are set
+    if (!AIRTABLE_ACCESS_TOKEN || !AIRTABLE_BASE_ID) {
+      console.error("Missing Airtable environment variables")
+      return NextResponse.json({ error: "Server configuration error: Missing Airtable credentials" }, { status: 500 })
+    }
+
+    const headers = {
+      Authorization: `Bearer ${AIRTABLE_ACCESS_TOKEN}`,
+      "Content-Type": "application/json",
+    }
+
+    const body = await request.json()
+    const { id, ...fields } = body
+
+    if (!id) {
+      return NextResponse.json({ error: "Task ID is required" }, { status: 400 })
+    }
+
+    const airtableData = {
+      fields: {
+        title: fields.title,
+        description: fields.description,
+        assignee_name: fields.assignee?.name,
+        assignee_avatar: fields.assignee?.avatar,
+        assignee_initials: fields.assignee?.initials,
+        due_date: fields.dueDate,
+        priority: fields.priority?.charAt(0).toUpperCase() + fields.priority.slice(1),
+        type: fields.type?.charAt(0).toUpperCase() + fields.type.slice(1),
+        duration: fields.duration,
+        instruments: fields.instruments,
+        status: fields.status
+          ?.split("")
+          .map((char: string, i: number) => (i === 0 || fields.status[i - 1] === " " ? char.toUpperCase() : char))
+          .join(""),
+        completed: fields.completed,
+      },
+    }
+
+    const apiUrl = `https://api.airtable.com/v0/${AIRTABLE_BASE_ID}/${encodeURIComponent(tableName)}/${id}`
+    console.log(`Updating in Airtable: ${apiUrl}`)
+
+    const response = await fetch(apiUrl, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(airtableData),
+    })
+
+    if (!response.ok) {
+      const errorText = await response.text()
+      console.error(`Airtable API error: ${response.status} ${response.statusText}`, errorText)
+      return NextResponse.json(
+        {
+          error: `Airtable API error: ${response.status} ${response.statusText}`,
+          details: errorText,
+        },
+        { status: response.status },
+      )
+    }
+
+    const data = await response.json()
+
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error("Error updating task:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to update task",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
