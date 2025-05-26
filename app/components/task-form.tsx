@@ -29,11 +29,12 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
     youtubeUrl: "https://www.youtube.com/watch?v=nA8KmHC2Z-g", // Default video
     timestamp: "0", // Default timestamp
     screenshotUrl: "",
+    boardId: columnId, // Keep track of board ID
   })
 
   const [isGeneratingScreenshot, setIsGeneratingScreenshot] = useState(false)
   const { toast } = useToast()
-  
+
   const generateThumbnail = async (base64Image: string, airtableRecordId: string) => {
     const response = await fetch("/api/uploadScreenshot", {
       method: "POST",
@@ -52,7 +53,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
 
     return result.imageUrl;
   };
-  
+
   const handleInstrumentChange = (value: string) => {
     const instruments = value
       .split(",")
@@ -137,6 +138,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
       },
     }
 
+    // Ensure task is saved with the board information
     onAddTask(task)
   }
 
