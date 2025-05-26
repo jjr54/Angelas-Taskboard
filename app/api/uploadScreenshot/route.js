@@ -18,8 +18,14 @@ export async function POST(request) {
 
     console.log("Uploading screenshot for record:", airtableRecordId)
 
+    // Ensure base64 has data URI prefix
+    let imageData = base64Image
+    if (!base64Image.startsWith("data:")) {
+      imageData = `data:image/png;base64,${base64Image}`
+    }
+
     // Step 1: Upload to Cloudinary
-    const uploadResult = await cloudinary.v2.uploader.upload(base64Image, {
+    const uploadResult = await cloudinary.v2.uploader.upload(imageData, {
       folder: "youtube-screenshots",
       resource_type: "image",
       format: "png",
