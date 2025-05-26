@@ -33,8 +33,6 @@ interface Task {
   description: string
   assignee: {
     name: string
-    avatar: string
-    initials: string
   }
   dueDate: string
   priority: "low" | "medium" | "high"
@@ -472,8 +470,6 @@ export default function MusicCompositionBoard() {
                 assignee: updatedTask.assignee?.name
                   ? {
                       name: updatedTask.assignee.name,
-                      avatar: task.assignee.avatar,
-                      initials: updatedTask.assignee.name.charAt(0).toUpperCase(),
                     }
                   : task.assignee,
               }
@@ -914,10 +910,9 @@ export default function MusicCompositionBoard() {
                         <Dialog
                           open={isAddTaskOpen && selectedColumn === column.id}
                           onOpenChange={(open) => {
-                            if (open) {
-                              setSelectedColumn(column.id)
-                            } else if (!isSubmittingTask) {
-                              setIsAddTaskOpen(open)
+                            if (!open && !isSubmittingTask) {
+                              setIsAddTaskOpen(false)
+                              setSelectedColumn("")
                             }
                           }}
                         >
@@ -937,23 +932,14 @@ export default function MusicCompositionBoard() {
                           <TaskForm
                             columnId={column.id}
                             onAddTask={addTask}
-                            onCancel={() => setIsAddTaskOpen(false)}
+                            onCancel={() => {
+                              setIsAddTaskOpen(false)
+                              setSelectedColumn("")
+                            }}
                             isSubmitting={isSubmittingTask}
+                            onSubmit={async () => {}}
+                            tempScreenshotBase64={null}
                           />
-                        </Dialog>
-                        {/* Edit Task Dialog */}
-                        <Dialog open={isEditTaskOpen} onOpenChange={setIsEditTaskOpen}>
-                          {taskToEdit && (
-                            <EditTaskForm
-                              task={taskToEdit}
-                              onUpdateTask={updateTask}
-                              onCancel={() => {
-                                setIsEditTaskOpen(false)
-                                setTaskToEdit(null)
-                              }}
-                              isSubmitting={isUpdatingTask}
-                            />
-                          )}
                         </Dialog>
                       </div>
                     )}
@@ -963,6 +949,28 @@ export default function MusicCompositionBoard() {
             </div>
           </DragDropContext>
         )}
+
+        {/* Edit Task Dialog - Outside of the column loop */}
+        <Dialog
+          open={isEditTaskOpen}
+          onOpenChange={(open) => {
+            if (!open && !isUpdatingTask) {
+              setIsEditTaskOpen(false)
+              setTaskToEdit(null)
+            }
+          }}
+        >
+          {taskToEdit && (
+            <EditTaskForm
+              task={taskToEdit}
+              onCancel={() => {
+                setIsEditTaskOpen(false)
+                setTaskToEdit(null)
+              }}
+              onSave={updateTask}
+            />
+          )}
+        </Dialog>
 
         {!isLoading && !error && isConfigured && (
           <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">

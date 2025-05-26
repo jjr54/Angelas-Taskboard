@@ -2,7 +2,6 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Music, Clock, Calendar, MoreVertical, Copy, Trash2, Youtube, Edit } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -54,7 +53,7 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
       className={cn(
         "task-card cursor-grab active:cursor-grabbing transition-all border-l-[6px] rounded-xl bg-secondary/30 backdrop-blur-sm border border-primary/10",
         priorityBorders[task.priority],
-        snapshot.isDragging && "shadow-lg rotate-2 animate-pulse-glow",
+        snapshot.isDragging && "shadow-lg rotate-2 animate-pulse-glow dragging",
         task.completed && "opacity-75",
       )}
     >
@@ -144,17 +143,11 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEd
           </div>
         )}
 
-        <div className="flex items-center justify-between pt-2">
+        <div className="flex items-center pt-2">
           <div className="flex items-center text-xs text-gray-400">
             <Calendar className="w-3 h-3 mr-1" />
             {formatDate(task.dueDate)}
           </div>
-          <Avatar className="w-6 h-6 border border-primary/20">
-            <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />
-            <AvatarFallback className="text-xs bg-primary/20 text-primary-foreground">
-              {task.assignee.initials}
-            </AvatarFallback>
-          </Avatar>
         </div>
       </CardContent>
     </Card>

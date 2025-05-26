@@ -263,27 +263,14 @@ export async function POST(request: Request) {
 
     console.log("Successfully created task:", data)
 
-    // Transform the Airtable response to match our Task interface
-    // Use default values for fields that might not exist in Airtable
+    // Add the created task to the UI
     const createdTask = {
       id: data.id,
       title: data.fields.title || body.title || "",
       description: data.fields.description || body.description || "",
       assignee: {
         name: data.fields.assignee_name || body.assignee?.name || "Unassigned",
-        avatar: "/placeholder.svg?height=32&width=32", // Default avatar
-        initials: data.fields.assignee_name ? data.fields.assignee_name.charAt(0).toUpperCase() : "UN",
       },
-      dueDate: data.fields.due_date || body.dueDate || "",
-      priority: (data.fields.priority || body.priority || "medium").toLowerCase(),
-      type: (data.fields.type || body.type || "composition").toLowerCase().replace(/\s+/g, ""),
-      duration: data.fields.duration || body.duration || "",
-      instruments: data.fields.instruments || body.instruments || [],
-      status: (data.fields.status || body.status || "todo").toLowerCase().replace(/\s+/g, ""),
-      completed: data.fields.completed || body.completed || false,
-      youtubeUrl: data.fields.youtube_url || body.youtubeUrl || "",
-      timestamp: data.fields.timestamp || body.timestamp || "",
-      screenshotUrl: data.fields.screenshot_url || body.screenshotUrl || "",
     }
 
     // Return the created task with the Airtable ID
@@ -513,8 +500,6 @@ function transformAirtableRecord(record: any) {
     description: record.fields.description || "",
     assignee: {
       name: record.fields.assignee_name || "Unassigned",
-      avatar: "/placeholder.svg?height=32&width=32", // Default avatar
-      initials: record.fields.assignee_name ? record.fields.assignee_name.charAt(0).toUpperCase() : "UN",
     },
     dueDate: record.fields.due_date || "",
     priority: (record.fields.priority || "medium").toLowerCase(),

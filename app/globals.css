@@ -101,6 +101,31 @@
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
 }
 
+/* Add these styles to fix the drag animation z-index issue */
+.task-card {
+  transition: all 0.3s ease;
+}
+
+.task-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+/* Add this to ensure dragged items appear above everything else */
+[data-rbd-draggable-context-id] {
+  z-index: 50 !important;
+}
+
+[data-rbd-drag-handle-draggable-id][aria-grabbed="true"] {
+  z-index: 9999 !important;
+  position: relative;
+}
+
+/* This ensures the dragged item appears above all other content */
+.dragging {
+  z-index: 9999 !important;
+}
+
 .glow {
   box-shadow: 0 0 15px rgba(var(--primary-rgb), 0.5);
 }
