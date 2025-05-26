@@ -14,9 +14,10 @@ interface TaskFormProps {
   columnId: string
   onAddTask: (task: any) => void
   onCancel: () => void
+  isSubmitting?: boolean
 }
 
-export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
+export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }: TaskFormProps) {
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -117,7 +118,14 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
   }
 
   const handleSubmit = async () => {
-    if (!newTask.title) return
+    if (!newTask.title) {
+      toast({
+        title: "Missing title",
+        description: "Please enter a title for the task",
+        variant: "destructive",
+      })
+      return
+    }
 
     const task = {
       ...newTask,
@@ -134,13 +142,11 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
               .toUpperCase()
           : "UN",
       },
+      tempScreenshotBase64: tempScreenshotBase64,
     }
 
-    // Pass the base64 screenshot data along with the task
-    onAddTask({
-      ...task,
-      tempScreenshotBase64: tempScreenshotBase64,
-    })
+    // Pass the task to the parent component
+    onAddTask(task)
   }
 
   return (
@@ -156,6 +162,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             value={newTask.title}
             onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
             placeholder="e.g., Main Theme Composition"
+            disabled={isSubmitting}
           />
         </div>
 
@@ -167,6 +174,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
             placeholder="Describe the musical task..."
             rows={3}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -180,6 +188,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
               value={newTask.youtubeUrl}
               onChange={(e) => setNewTask({ ...newTask, youtubeUrl: e.target.value })}
               placeholder="e.g., https://www.youtube.com/watch?v=nA8KmHC2Z-g"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -193,13 +202,14 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
                 value={newTask.timestamp}
                 onChange={(e) => setNewTask({ ...newTask, timestamp: e.target.value })}
                 placeholder="e.g., 30"
+                disabled={isSubmitting}
               />
             </div>
             <div className="flex items-end">
               <Button
                 type="button"
                 onClick={generateScreenshot}
-                disabled={isGeneratingScreenshot || !newTask.youtubeUrl}
+                disabled={isGeneratingScreenshot || !newTask.youtubeUrl || isSubmitting}
                 className="w-full"
               >
                 {isGeneratingScreenshot ? (
@@ -237,7 +247,11 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
         <div className="grid grid-cols-2 gap-4">
           <div className="grid gap-2">
             <Label htmlFor="type">Type</Label>
-            <Select value={newTask.type} onValueChange={(value: any) => setNewTask({ ...newTask, type: value })}>
+            <Select
+              value={newTask.type}
+              onValueChange={(value: any) => setNewTask({ ...newTask, type: value })}
+              disabled={isSubmitting}
+            >
               <SelectTrigger>
                 <SelectValue />
               </SelectTrigger>
@@ -256,6 +270,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             <Select
               value={newTask.priority}
               onValueChange={(value: any) => setNewTask({ ...newTask, priority: value })}
+              disabled={isSubmitting}
             >
               <SelectTrigger>
                 <SelectValue />
@@ -277,6 +292,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
               value={newTask.assignee}
               onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
               placeholder="Team member name"
+              disabled={isSubmitting}
             />
           </div>
 
@@ -287,6 +303,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
               value={newTask.duration}
               onChange={(e) => setNewTask({ ...newTask, duration: e.target.value })}
               placeholder="e.g., 3:30"
+              disabled={isSubmitting}
             />
           </div>
         </div>
@@ -298,6 +315,7 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             type="date"
             value={newTask.dueDate}
             onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+            disabled={isSubmitting}
           />
         </div>
 
@@ -308,16 +326,24 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
             value={instrumentsInput}
             onChange={(e) => handleInstrumentChange(e.target.value)}
             placeholder="e.g., Piano, Strings, Orchestra"
+            disabled={isSubmitting}
           />
           <p className="text-xs text-gray-500 dark:text-gray-400">Separate multiple instruments with commas</p>
         </div>
 
         <div className="flex justify-end gap-2 pt-4">
-          <Button variant="outline" onClick={onCancel}>
+          <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!newTask.title}>
-            Add Task
+          <Button onClick={handleSubmit} disabled={!newTask.title || isSubmitting}>
+            {isSubmitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              "Add Task"
+            )}
           </Button>
         </div>
       </div>

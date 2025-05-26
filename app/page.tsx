@@ -70,6 +70,7 @@ export default function MusicCompositionBoard() {
   })
   const [globalYoutubeUrl, setGlobalYoutubeUrl] = useState("https://www.youtube.com/watch?v=nA8KmHC2Z-g")
   const [youtubePreviewUrl, setYoutubePreviewUrl] = useState("")
+  const [isSubmittingTask, setIsSubmittingTask] = useState(false)
 
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -375,7 +376,13 @@ export default function MusicCompositionBoard() {
   }
 
   const addTask = async (task: any) => {
-    if (!task.title || !selectedColumn) return
+    if (!task.title || !selectedColumn) {
+      console.log("Missing task title or selected column", { title: task.title, column: selectedColumn })
+      return
+    }
+
+    // Set submitting state to prevent multiple submissions
+    setIsSubmittingTask(true)
 
     // Extract the base64 screenshot if present
     const { tempScreenshotBase64, ...taskData } = task
@@ -385,7 +392,10 @@ export default function MusicCompositionBoard() {
       taskData.youtubeUrl = globalYoutubeUrl
     }
 
-    setIsAddTaskOpen(false)
+    // Ensure status is set to the selected column
+    taskData.status = selectedColumn
+
+    console.log("Creating task:", { taskData, column: selectedColumn })
 
     try {
       // First, create the task in Airtable
@@ -401,10 +411,12 @@ export default function MusicCompositionBoard() {
       }
 
       const createdTask = await response.json()
+      console.log("Task created successfully:", createdTask)
 
       // If we have a screenshot, upload it to Cloudinary and update Airtable
       if (tempScreenshotBase64) {
         try {
+          console.log("Uploading screenshot to Cloudinary...")
           const uploadResponse = await fetch("/api/uploadScreenshot", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -418,6 +430,7 @@ export default function MusicCompositionBoard() {
             const uploadData = await uploadResponse.json()
             // Update the task with the Cloudinary URL
             createdTask.screenshotUrl = uploadData.imageUrl
+            console.log("Screenshot uploaded successfully:", uploadData.imageUrl)
           } else {
             console.error("Failed to upload screenshot to Cloudinary")
           }
@@ -444,6 +457,9 @@ export default function MusicCompositionBoard() {
         title: "Success",
         description: "Task created successfully",
       })
+
+      // Close the dialog after successful creation
+      setIsAddTaskOpen(false)
     } catch (error) {
       console.error("Error creating task:", error)
       toast({
@@ -451,6 +467,8 @@ export default function MusicCompositionBoard() {
         description: "Failed to create task in Airtable",
         variant: "destructive",
       })
+    } finally {
+      setIsSubmittingTask(false)
     }
   }
 
@@ -644,20 +662,30 @@ export default function MusicCompositionBoard() {
                           onOpenChange={(open) => {
                             if (open) {
                               setSelectedColumn(column.id)
+                            } else if (!isSubmittingTask) {
+                              setIsAddTaskOpen(open)
                             }
-                            setIsAddTaskOpen(open)
                           }}
                         >
                           <DialogTrigger asChild>
                             <Button
                               variant="ghost"
                               className="w-full border-2 border-dashed border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 h-20"
+                              onClick={() => {
+                                setSelectedColumn(column.id)
+                                setIsAddTaskOpen(true)
+                              }}
                             >
                               <Plus className="w-4 h-4 mr-2" />
                               Add Task
                             </Button>
                           </DialogTrigger>
-                          <TaskForm columnId={column.id} onAddTask={addTask} onCancel={() => setIsAddTaskOpen(false)} />
+                          <TaskForm
+                            columnId={column.id}
+                            onAddTask={addTask}
+                            onCancel={() => setIsAddTaskOpen(false)}
+                            isSubmitting={isSubmittingTask}
+                          />
                         </Dialog>
                       </div>
                     )}
