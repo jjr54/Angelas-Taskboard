@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Music, Clock, Calendar, MoreVertical, Copy, Trash2, Youtube } from "lucide-react"
+import { Music, Clock, Calendar, MoreVertical, Copy, Trash2, Youtube, Edit } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 
@@ -14,6 +14,7 @@ interface TaskCardProps {
   snapshot: any
   onDelete: (taskId: string) => void
   onDuplicate: (taskId: string) => void
+  onEdit: (task: any) => void
 }
 
 const typeColors = {
@@ -30,7 +31,21 @@ const priorityBorders = {
   high: "border-red-500 dark:border-red-400",
 }
 
-export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate }: TaskCardProps) {
+// Function to format date to MM/dd/YYYY
+const formatDate = (dateString: string) => {
+  if (!dateString) return "No due date"
+
+  const date = new Date(dateString)
+  if (isNaN(date.getTime())) return "Invalid date"
+
+  const month = (date.getMonth() + 1).toString().padStart(2, "0")
+  const day = date.getDate().toString().padStart(2, "0")
+  const year = date.getFullYear()
+
+  return `${month}/${day}/${year}`
+}
+
+export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate, onEdit }: TaskCardProps) {
   return (
     <Card
       ref={provided.innerRef}
@@ -82,6 +97,10 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate }: Ta
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => onEdit(task)}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onDuplicate(task.id)}>
                 <Copy className="mr-2 h-4 w-4" />
                 Duplicate
@@ -127,7 +146,7 @@ export function TaskCard({ task, provided, snapshot, onDelete, onDuplicate }: Ta
         <div className="flex items-center justify-between pt-2">
           <div className="flex items-center text-xs text-gray-500 dark:text-gray-400">
             <Calendar className="w-3 h-3 mr-1" />
-            {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due date"}
+            {formatDate(task.dueDate)}
           </div>
           <Avatar className="w-6 h-6">
             <AvatarImage src={task.assignee.avatar || "/placeholder.svg"} />

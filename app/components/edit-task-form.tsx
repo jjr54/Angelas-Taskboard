@@ -10,46 +10,48 @@ import { DialogHeader, DialogTitle, DialogContent } from "@/components/ui/dialog
 import { Loader2, Camera, X, ExternalLink } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-interface TaskFormProps {
-  columnId: string
-  onAddTask: (task: any) => void
+interface EditTaskFormProps {
+  task: any
+  onUpdateTask: (task: any) => void
   onCancel: () => void
   isSubmitting?: boolean
 }
 
-export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }: TaskFormProps) {
-  const [newTask, setNewTask] = useState({
-    title: "",
-    description: "",
-    assignee: "",
-    dueDate: "",
-    priority: "medium" as "low" | "medium" | "high",
-    type: "composition" as "composition" | "arrangement" | "recording" | "mixing" | "review",
-    duration: "",
-    instruments: [] as string[],
-    youtubeUrl: "",
-    timestamp: "0",
-    screenshotUrl: "",
-    boardId: columnId,
+export function EditTaskForm({ task, onUpdateTask, onCancel, isSubmitting = false }: EditTaskFormProps) {
+  const [editedTask, setEditedTask] = useState({
+    id: task.id,
+    title: task.title || "",
+    description: task.description || "",
+    assignee: task.assignee?.name || "",
+    dueDate: task.dueDate || "",
+    priority: task.priority || "medium",
+    type: task.type || "composition",
+    duration: task.duration || "",
+    instruments: task.instruments || [],
+    youtubeUrl: task.youtubeUrl || "",
+    timestamp: task.timestamp || "0",
+    screenshotUrl: task.screenshotUrl || "",
+    status: task.status || "todo",
+    completed: task.completed || false,
   })
 
-  const [durationMinutes, setDurationMinutes] = useState("")
-  const [durationSeconds, setDurationSeconds] = useState("")
-  const [instrumentsInput, setInstrumentsInput] = useState("")
+  // Parse duration into minutes and seconds
+  const parseDuration = (duration: string) => {
+    if (!duration) return { minutes: "", seconds: "" }
+    const parts = duration.split(":")
+    return {
+      minutes: parts[0] || "",
+      seconds: parts[1] || "",
+    }
+  }
+
+  const initialDuration = parseDuration(task.duration)
+  const [durationMinutes, setDurationMinutes] = useState(initialDuration.minutes)
+  const [durationSeconds, setDurationSeconds] = useState(initialDuration.seconds)
+  const [instrumentsInput, setInstrumentsInput] = useState(task.instruments?.join(", ") || "")
   const [isGeneratingScreenshot, setIsGeneratingScreenshot] = useState(false)
   const [tempScreenshotBase64, setTempScreenshotBase64] = useState("")
   const { toast } = useToast()
-
-  // Load default YouTube URL from localStorage
-  useEffect(() => {
-    const savedYoutubeUrl = localStorage.getItem("globalYoutubeUrl")
-    if (savedYoutubeUrl) {
-      setNewTask((prev) => ({
-        ...prev,
-        youtubeUrl: savedYoutubeUrl,
-      }))
-    }
-  }, [])
 
   // Update duration when minutes or seconds change
   useEffect(() => {
@@ -59,12 +61,12 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
       const totalSeconds = mins * 60 + secs
       const formattedMins = Math.floor(totalSeconds / 60)
       const formattedSecs = totalSeconds % 60
-      setNewTask((prev) => ({
+      setEditedTask((prev) => ({
         ...prev,
         duration: `${formattedMins}:${formattedSecs.toString().padStart(2, "0")}`,
       }))
     } else {
-      setNewTask((prev) => ({ ...prev, duration: "" }))
+      setEditedTask((prev) => ({ ...prev, duration: "" }))
     }
   }, [durationMinutes, durationSeconds])
 
@@ -74,7 +76,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
       .split(",")
       .map((i) => i.trim())
       .filter((i) => i)
-    setNewTask({ ...newTask, instruments })
+    setEditedTask({ ...editedTask, instruments })
   }
 
   const extractVideoId = (url: string): string | null => {
@@ -87,7 +89,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
     try {
       setIsGeneratingScreenshot(true)
 
-      const videoId = extractVideoId(newTask.youtubeUrl)
+      const videoId = extractVideoId(editedTask.youtubeUrl)
       if (!videoId) {
         toast({
           title: "Invalid YouTube URL",
@@ -97,7 +99,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
         return
       }
 
-      const timestamp = Number.parseInt(newTask.timestamp) || 0
+      const timestamp = Number.parseInt(editedTask.timestamp) || 0
 
       // Generate screenshot
       const response = await fetch("/api/youtube-screenshot", {
@@ -115,8 +117,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
 
       // Store the base64 screenshot temporarily
       setTempScreenshotBase64(data.screenshot)
-      setNewTask({
-        ...newTask,
+      setEditedTask({
+        ...editedTask,
         screenshotUrl: data.screenshot,
       })
 
@@ -138,8 +140,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
 
   const clearScreenshot = () => {
     setTempScreenshotBase64("")
-    setNewTask({
-      ...newTask,
+    setEditedTask({
+      ...editedTask,
       screenshotUrl: "",
     })
   }
@@ -168,7 +170,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
   }
 
   const handleSubmit = async () => {
-    if (!newTask.title) {
+    if (!editedTask.title) {
       toast({
         title: "Missing title",
         description: "Please enter a title for the task",
@@ -177,52 +179,37 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
       return
     }
 
-    // Create a task object with only essential fields
-    const task = {
-      title: newTask.title,
-      description: newTask.description,
-      status: columnId,
-      priority: newTask.priority,
-      type: newTask.type,
-      completed: false,
+    // Create a task object with all fields
+    const updatedTask = {
+      ...editedTask,
+      assignee: editedTask.assignee
+        ? {
+            name: editedTask.assignee,
+          }
+        : task.assignee,
     }
 
-    // Only add optional fields if they have values
-    if (newTask.dueDate) task.dueDate = newTask.dueDate
-    if (newTask.duration) task.duration = newTask.duration
-    if (newTask.instruments && newTask.instruments.length > 0) task.instruments = newTask.instruments
-    if (newTask.youtubeUrl) task.youtubeUrl = newTask.youtubeUrl
-    if (newTask.timestamp) task.timestamp = newTask.timestamp
-
-    // Only add assignee if it has a value
-    if (newTask.assignee) {
-      task.assignee = {
-        name: newTask.assignee,
-        // Don't include avatar or initials as they might not exist in Airtable
-      }
-    }
-
-    // Add screenshot if available
+    // Add screenshot if a new one was generated
     if (tempScreenshotBase64) {
-      task.tempScreenshotBase64 = tempScreenshotBase64
+      updatedTask.tempScreenshotBase64 = tempScreenshotBase64
     }
 
     // Pass the task to the parent component
-    onAddTask(task)
+    onUpdateTask(updatedTask)
   }
 
   return (
     <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
       <DialogHeader>
-        <DialogTitle>Add New Task</DialogTitle>
+        <DialogTitle>Edit Task</DialogTitle>
       </DialogHeader>
       <div className="grid gap-4 py-4">
         <div className="grid gap-2">
           <Label htmlFor="title">Task Title</Label>
           <Input
             id="title"
-            value={newTask.title}
-            onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
+            value={editedTask.title}
+            onChange={(e) => setEditedTask({ ...editedTask, title: e.target.value })}
             placeholder="e.g., Main Theme Composition"
             disabled={isSubmitting}
           />
@@ -232,8 +219,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           <Label htmlFor="description">Description</Label>
           <Textarea
             id="description"
-            value={newTask.description}
-            onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
+            value={editedTask.description}
+            onChange={(e) => setEditedTask({ ...editedTask, description: e.target.value })}
             placeholder="Describe the musical task..."
             rows={3}
             disabled={isSubmitting}
@@ -247,8 +234,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
             <Label htmlFor="youtubeUrl">YouTube Video URL</Label>
             <Input
               id="youtubeUrl"
-              value={newTask.youtubeUrl}
-              onChange={(e) => setNewTask({ ...newTask, youtubeUrl: e.target.value })}
+              value={editedTask.youtubeUrl}
+              onChange={(e) => setEditedTask({ ...editedTask, youtubeUrl: e.target.value })}
               placeholder="e.g., https://www.youtube.com/watch?v=nA8KmHC2Z-g"
               disabled={isSubmitting}
             />
@@ -261,8 +248,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
                 id="timestamp"
                 type="number"
                 min="0"
-                value={newTask.timestamp}
-                onChange={(e) => setNewTask({ ...newTask, timestamp: e.target.value })}
+                value={editedTask.timestamp}
+                onChange={(e) => setEditedTask({ ...editedTask, timestamp: e.target.value })}
                 placeholder="e.g., 30"
                 disabled={isSubmitting}
               />
@@ -271,7 +258,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
               <Button
                 type="button"
                 onClick={generateScreenshot}
-                disabled={isGeneratingScreenshot || !newTask.youtubeUrl || isSubmitting}
+                disabled={isGeneratingScreenshot || !editedTask.youtubeUrl || isSubmitting}
                 className="w-full"
               >
                 {isGeneratingScreenshot ? (
@@ -290,18 +277,18 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           </div>
 
           {/* Screenshot Preview Section */}
-          {tempScreenshotBase64 && (
+          {(editedTask.screenshotUrl || tempScreenshotBase64) && (
             <div className="mt-4 border rounded-md overflow-hidden bg-white dark:bg-gray-800">
               <div className="relative">
                 <img
-                  src={tempScreenshotBase64 || "/placeholder.svg"}
+                  src={tempScreenshotBase64 || editedTask.screenshotUrl || "/placeholder.svg"}
                   alt="YouTube video screenshot"
                   className="w-full h-auto object-cover"
                 />
 
                 {/* Timestamp Badge */}
                 <div className="absolute bottom-2 left-2 bg-black/70 text-white px-2 py-1 rounded text-xs">
-                  {formatTimestamp(Number.parseInt(newTask.timestamp) || 0)}
+                  {formatTimestamp(Number.parseInt(editedTask.timestamp) || 0)}
                 </div>
 
                 {/* Action Buttons */}
@@ -310,7 +297,7 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
                     variant="secondary"
                     size="icon"
                     className="h-8 w-8 bg-black/50 hover:bg-black/70 text-white rounded-full"
-                    onClick={() => window.open(newTask.youtubeUrl, "_blank")}
+                    onClick={() => window.open(editedTask.youtubeUrl, "_blank")}
                     title="Open YouTube video"
                   >
                     <ExternalLink className="h-4 w-4" />
@@ -329,7 +316,9 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
 
               {/* Caption */}
               <div className="p-2 text-xs text-gray-500 dark:text-gray-400 border-t">
-                Screenshot will be uploaded to Cloudinary when you create the task
+                {tempScreenshotBase64
+                  ? "New screenshot will be uploaded when you save"
+                  : "Current screenshot from Cloudinary"}
               </div>
             </div>
           )}
@@ -339,8 +328,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           <div className="grid gap-2">
             <Label htmlFor="type">Type</Label>
             <Select
-              value={newTask.type}
-              onValueChange={(value: any) => setNewTask({ ...newTask, type: value })}
+              value={editedTask.type}
+              onValueChange={(value: any) => setEditedTask({ ...editedTask, type: value })}
               disabled={isSubmitting}
             >
               <SelectTrigger>
@@ -359,8 +348,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           <div className="grid gap-2">
             <Label htmlFor="priority">Priority</Label>
             <Select
-              value={newTask.priority}
-              onValueChange={(value: any) => setNewTask({ ...newTask, priority: value })}
+              value={editedTask.priority}
+              onValueChange={(value: any) => setEditedTask({ ...editedTask, priority: value })}
               disabled={isSubmitting}
             >
               <SelectTrigger>
@@ -380,8 +369,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
             <Label htmlFor="assignee">Assignee</Label>
             <Input
               id="assignee"
-              value={newTask.assignee}
-              onChange={(e) => setNewTask({ ...newTask, assignee: e.target.value })}
+              value={editedTask.assignee}
+              onChange={(e) => setEditedTask({ ...editedTask, assignee: e.target.value })}
               placeholder="Team member name"
               disabled={isSubmitting}
             />
@@ -420,8 +409,8 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           <Input
             id="dueDate"
             type="date"
-            value={newTask.dueDate}
-            onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
+            value={editedTask.dueDate}
+            onChange={(e) => setEditedTask({ ...editedTask, dueDate: e.target.value })}
             disabled={isSubmitting}
           />
         </div>
@@ -442,14 +431,14 @@ export function TaskForm({ columnId, onAddTask, onCancel, isSubmitting = false }
           <Button variant="outline" onClick={onCancel} disabled={isSubmitting}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={!newTask.title || isSubmitting}>
+          <Button onClick={handleSubmit} disabled={!editedTask.title || isSubmitting}>
             {isSubmitting ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating...
+                Saving...
               </>
             ) : (
-              "Add Task"
+              "Save Changes"
             )}
           </Button>
         </div>

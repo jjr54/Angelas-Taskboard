@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { AirtableConfig } from "./components/airtable-config"
+import { EditTaskForm } from "./components/edit-task-form"
 
 interface Task {
   id: string
@@ -73,6 +74,9 @@ export default function MusicCompositionBoard() {
   const [isSubmittingTask, setIsSubmittingTask] = useState(false)
   const [isCreatingTestTask, setIsCreatingTestTask] = useState(false)
   const [apiResponse, setApiResponse] = useState<any>(null)
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState(false)
+  const [taskToEdit, setTaskToEdit] = useState<any>(null)
+  const [isUpdatingTask, setIsUpdatingTask] = useState(false)
 
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -377,6 +381,107 @@ export default function MusicCompositionBoard() {
     }
   }
 
+  const handleEdit = (task: any) => {
+    setTaskToEdit(task)
+    setIsEditTaskOpen(true)
+  }
+
+  const updateTask = async (updatedTask: any) => {
+    if (!updatedTask.id) {
+      console.error("No task ID provided for update")
+      return
+    }
+
+    setIsUpdatingTask(true)
+
+    try {
+      // Extract the base64 screenshot if present
+      const { tempScreenshotBase64, ...taskData } = updatedTask
+
+      // Update task in Airtable
+      const response = await fetch(`/api/tasks?table=${encodeURIComponent(airtableConfig.tableName)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(taskData),
+      })
+
+      const responseData = await response.json()
+      console.log("Update API Response:", responseData)
+
+      if (!response.ok) {
+        throw new Error(responseData.error || `API error: ${response.status} ${response.statusText}`)
+      }
+
+      // If we have a new screenshot, upload it to Cloudinary
+      if (tempScreenshotBase64) {
+        try {
+          console.log("Uploading new screenshot to Cloudinary...")
+          const uploadResponse = await fetch("/api/uploadScreenshot", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              base64Image: tempScreenshotBase64,
+              airtableRecordId: updatedTask.id,
+            }),
+          })
+
+          if (uploadResponse.ok) {
+            const uploadData = await uploadResponse.json()
+            updatedTask.screenshotUrl = uploadData.imageUrl
+            console.log("Screenshot uploaded successfully:", uploadData.imageUrl)
+          } else {
+            console.error("Failed to upload screenshot to Cloudinary")
+          }
+        } catch (uploadError) {
+          console.error("Error uploading screenshot:", uploadError)
+        }
+      }
+
+      // Update the UI
+      const newColumns = columns.map((col) => {
+        return {
+          ...col,
+          tasks: col.tasks.map((task) => {
+            if (task.id === updatedTask.id) {
+              return {
+                ...task,
+                ...updatedTask,
+                assignee: updatedTask.assignee?.name
+                  ? {
+                      name: updatedTask.assignee.name,
+                      avatar: task.assignee.avatar,
+                      initials: updatedTask.assignee.name.charAt(0).toUpperCase(),
+                    }
+                  : task.assignee,
+              }
+            }
+            return task
+          }),
+        }
+      })
+
+      setColumns(newColumns)
+
+      toast({
+        title: "Success",
+        description: "Task updated successfully",
+      })
+
+      // Close the dialog
+      setIsEditTaskOpen(false)
+      setTaskToEdit(null)
+    } catch (error) {
+      console.error("Error updating task:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update task in Airtable",
+        variant: "destructive",
+      })
+    } finally {
+      setIsUpdatingTask(false)
+    }
+  }
+
   const addTask = async (task: any) => {
     if (!task.title || !selectedColumn) {
       console.log("Missing task title or selected column", { title: task.title, column: selectedColumn })
@@ -482,19 +587,14 @@ export default function MusicCompositionBoard() {
     setApiResponse(null)
 
     try {
-      // Create a simple test task
+      // Create a simple test task with minimal fields
       const testTask = {
         title: `Test Task ${new Date().toLocaleTimeString()}`,
         description: "This is a test task to check Airtable connectivity",
         status: "todo",
         priority: "medium",
         type: "composition",
-        assignee: {
-          name: "Test User",
-          avatar: "/placeholder.svg?height=32&width=32",
-          initials: "TU",
-        },
-        completed: false,
+        // Removed complex fields that might not exist in Airtable
       }
 
       console.log("Creating test task:", testTask)
@@ -758,6 +858,7 @@ export default function MusicCompositionBoard() {
                                 snapshot={snapshot}
                                 onDelete={(taskId) => deleteTask(taskId, column.id)}
                                 onDuplicate={(taskId) => duplicateTask(taskId, column.id)}
+                                onEdit={handleEdit}
                               />
                             )}
                           </Draggable>
@@ -793,6 +894,20 @@ export default function MusicCompositionBoard() {
                             onCancel={() => setIsAddTaskOpen(false)}
                             isSubmitting={isSubmittingTask}
                           />
+                        </Dialog>
+                        {/* Edit Task Dialog */}
+                        <Dialog open={isEditTaskOpen} onOpenChange={setIsEditTaskOpen}>
+                          {taskToEdit && (
+                            <EditTaskForm
+                              task={taskToEdit}
+                              onUpdateTask={updateTask}
+                              onCancel={() => {
+                                setIsEditTaskOpen(false)
+                                setTaskToEdit(null)
+                              }}
+                              isSubmitting={isUpdatingTask}
+                            />
+                          )}
                         </Dialog>
                       </div>
                     )}
