@@ -33,7 +33,26 @@ export function TaskForm({ columnId, onAddTask, onCancel }: TaskFormProps) {
 
   const [isGeneratingScreenshot, setIsGeneratingScreenshot] = useState(false)
   const { toast } = useToast()
+  
+const generateThumbnail = async (base64Image: string, airtableRecordId: string) => {
+  const response = await fetch("/api/uploadScreenshot", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ base64Image, airtableRecordId }),
+  });
 
+  const result = await response.json();
+
+  if (!response.ok) {
+    console.error("Thumbnail generation failed:", result.error || result);
+    return null;
+  }
+
+  return result.imageUrl;
+};
+  
   const handleInstrumentChange = (value: string) => {
     const instruments = value
       .split(",")
